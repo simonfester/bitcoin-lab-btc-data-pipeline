@@ -7,8 +7,6 @@ A data pipeline for downloading, storing, and analysing Bitcoin on-chain metrics
 - **53 on-chain metrics** including MVRV, SOPR, NUPL, NVT, supply distributions, and more
 - **Incremental sync** — only downloads new data since last update
 - **Parquet storage** — fast, compressed, ML-friendly columnar format
-- **Regime analysis** — pre-defined bull/bear market periods
-- **Exploration notebook** — correlation analysis, predictive power testing
 
 ## Quick Start
 
@@ -48,14 +46,11 @@ python run.py status
 bitcoin-lab-btc-data-pipeline/
 ├── config/
 │   ├── metrics.yaml       # Metric definitions (endpoints, priorities)
-│   ├── regimes.yaml       # Bull/bear market period definitions
 │   └── sync_state.json    # Auto-generated sync state (gitignored)
 ├── data/
 │   └── raw/               # Parquet files per metric (gitignored)
 ├── logs/
 │   └── sync.log           # Sync logs
-├── notebooks/
-│   └── exploration.ipynb  # Data exploration & analysis
 ├── src/
 │   └── downloader.py      # Core pipeline code
 ├── run.py                 # CLI entry point
@@ -115,38 +110,6 @@ df = con.execute("""
 """).df()
 ```
 
-## Market Regimes
-
-Pre-defined bull/bear periods in `config/regimes.yaml`:
-
-| Period | Type | Start | End |
-|--------|------|-------|-----|
-| 2015-2017 Bull | bull | 2015-10-01 | 2017-12-17 |
-| 2018 Bear | bear | 2017-12-17 | 2018-12-15 |
-| 2020-2021 Bull | bull | 2020-03-13 | 2021-11-10 |
-| 2022 Bear | bear | 2021-11-10 | 2022-11-21 |
-| 2023-2024 Recovery | bull | 2022-11-21 | 2024-03-14 |
-| 2024-Present | bull | 2024-09-01 | — |
-
-## Key Findings
-
-### Correlation Insights
-
-From the exploration notebook:
-
-1. **MVRV_Z is the master signal** — 0.98 correlation with MVRV, 0.82 with NUPL
-2. **Most metrics flip direction** between bull and bear markets
-3. **Consistent signals** (work in both regimes): liveliness, vaultedness
-
-### Predictive Power by Regime
-
-| Metric | Bull r | Bear r | Notes |
-|--------|--------|--------|-------|
-| mvrv_sth | +0.10 | **-0.38** | Flips! Strong bear predictor |
-| mvrv_z | +0.07 | **-0.34** | Flips! |
-| liveliness | -0.08 | -0.19 | Consistent — high activity = lower returns |
-| vaultedness | +0.08 | +0.19 | Consistent — dormancy = higher returns |
-
 ## API Requirements
 
 - **Tier 2** Bitcoin Lab subscription (or higher)
@@ -171,4 +134,3 @@ MIT
 ## Acknowledgements
 
 - [Bitcoin Lab](https://researchbitcoin.net) for the on-chain data API
-- [Glassnode](https://glassnode.com) for pioneering on-chain analytics
