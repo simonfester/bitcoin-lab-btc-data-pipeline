@@ -1,0 +1,448 @@
+# Bitcoin Lab API - Metrics Configuration
+# =========================================
+# Defines all metrics to download, their endpoints, and priorities
+# Priority levels: critical (always update first), high, medium, low
+
+api:
+  base_url: https://api.researchbitcoin.net
+  version: v2
+  token_env: BITCOIN_LAB_TOKEN  # Environment variable name
+  rate_limit_per_minute: 60
+  quota_weekly: 40_000_000
+
+defaults:
+  resolution: d1
+  output_format: json
+  start_date: "2015-01-01"  # Default backfill start
+
+# ============================================================================
+# METRICS REGISTRY
+# ============================================================================
+# Each metric has:
+#   - endpoint: API endpoint path (under /v2/)
+#   - data_field: specific field to request
+#   - priority: critical | high | medium | low
+#   - description: what this metric measures
+#   - tier: API tier required (0, 1, or 2)
+# ============================================================================
+
+metrics:
+
+  # ==========================================================================
+  # PRICE & MARKET DATA (Critical - needed for all strategies)
+  # ==========================================================================
+  
+  - name: price
+    endpoint: price
+    data_field: price
+    priority: critical
+    tier: 0
+    description: "BTC price in USD"
+
+  - name: market_cap
+    endpoint: marketcap
+    data_field: market_cap
+    priority: critical
+    tier: 0
+    description: "Total market capitalization"
+
+  # ==========================================================================
+  # VALUATION METRICS (High - core on-chain signals)
+  # ==========================================================================
+
+  - name: mvrv
+    endpoint: market_value_to_realized_value
+    data_field: mvrv
+    priority: high
+    tier: 1
+    description: "Market Value to Realized Value ratio"
+
+  - name: mvrv_z
+    endpoint: market_value_to_realized_value
+    data_field: mvrv_z
+    priority: high
+    tier: 1
+    description: "MVRV Z-Score (standardized)"
+
+  - name: mvrv_lth
+    endpoint: market_value_to_realized_value
+    data_field: mvrv_lth
+    priority: high
+    tier: 2
+    description: "MVRV for Long-Term Holders"
+
+  - name: mvrv_sth
+    endpoint: market_value_to_realized_value
+    data_field: mvrv_sth
+    priority: high
+    tier: 2
+    description: "MVRV for Short-Term Holders"
+
+  - name: nvt
+    endpoint: network_value_to_transaction
+    data_field: nvt
+    priority: high
+    tier: 1
+    description: "Network Value to Transaction ratio"
+
+  - name: velocity
+    endpoint: network_value_to_transaction
+    data_field: velocity
+    priority: medium
+    tier: 1
+    description: "Monetary velocity"
+
+  # ==========================================================================
+  # PROFIT/LOSS METRICS (High - sentiment indicators)
+  # ==========================================================================
+
+  - name: sopr
+    endpoint: spent_output_profit_ratio
+    data_field: sopr
+    priority: high
+    tier: 1
+    description: "Spent Output Profit Ratio"
+
+  - name: sopr_lth
+    endpoint: spent_output_profit_ratio
+    data_field: sopr_lth
+    priority: high
+    tier: 2
+    description: "SOPR for Long-Term Holders"
+
+  - name: sopr_sth
+    endpoint: spent_output_profit_ratio
+    data_field: sopr_sth
+    priority: high
+    tier: 2
+    description: "SOPR for Short-Term Holders"
+
+  - name: nupl
+    endpoint: net_unrealized_profit_loss
+    data_field: net_unrealized_profit_loss
+    priority: high
+    tier: 1
+    description: "Net Unrealized Profit/Loss"
+
+  - name: nupl_lth
+    endpoint: net_unrealized_profit_loss
+    data_field: net_unrealized_profit_loss_lth
+    priority: high
+    tier: 2
+    description: "NUPL for Long-Term Holders"
+
+  - name: nupl_sth
+    endpoint: net_unrealized_profit_loss
+    data_field: net_unrealized_profit_loss_sth
+    priority: high
+    tier: 2
+    description: "NUPL for Short-Term Holders"
+
+  - name: net_realized_pnl
+    endpoint: net_realized_profit_loss
+    data_field: net_realized_profit_loss
+    priority: high
+    tier: 1
+    description: "Net Realized Profit/Loss"
+
+  # ==========================================================================
+  # SUPPLY METRICS (High - holder behavior)
+  # ==========================================================================
+
+  - name: supply_in_profit
+    endpoint: supply_in_profitloss
+    data_field: supply_in_profit
+    priority: high
+    tier: 1
+    description: "Supply currently in profit"
+
+  - name: supply_in_profit_percent
+    endpoint: supply_in_profitloss
+    data_field: supply_in_profit_percent
+    priority: high
+    tier: 1
+    description: "Percentage of supply in profit"
+
+  - name: supply_in_loss
+    endpoint: supply_in_profitloss
+    data_field: supply_in_loss
+    priority: medium
+    tier: 1
+    description: "Supply currently in loss"
+
+  - name: supply_lth
+    endpoint: supply_distribution
+    data_field: supply_lth
+    priority: high
+    tier: 1
+    description: "Long-Term Holder supply"
+
+  - name: supply_sth
+    endpoint: supply_distribution
+    data_field: supply_sth
+    priority: high
+    tier: 1
+    description: "Short-Term Holder supply"
+
+  - name: supply_lth_sth_ratio
+    endpoint: supply_distribution
+    data_field: supply_lth_sth_ratio
+    priority: high
+    tier: 1
+    description: "LTH to STH supply ratio"
+
+  - name: supply_total
+    endpoint: supply_distribution
+    data_field: supply_total
+    priority: medium
+    tier: 0
+    description: "Total circulating supply"
+
+  # ==========================================================================
+  # REALIZED CAP & PRICE (High - cost basis analysis)
+  # ==========================================================================
+
+  - name: realized_cap
+    endpoint: realizedcap
+    data_field: realized_cap
+    priority: high
+    tier: 1
+    description: "Realized capitalization"
+
+  - name: realized_cap_lth
+    endpoint: realizedcap
+    data_field: realized_cap_lth
+    priority: medium
+    tier: 2
+    description: "Realized cap for LTH"
+
+  - name: realized_cap_sth
+    endpoint: realizedcap
+    data_field: realized_cap_sth
+    priority: medium
+    tier: 2
+    description: "Realized cap for STH"
+
+  - name: realized_price
+    endpoint: realizedprice
+    data_field: realized_price
+    priority: high
+    tier: 1
+    description: "Aggregate realized price (cost basis)"
+
+  - name: realized_price_lth
+    endpoint: realizedprice
+    data_field: realized_price_lth
+    priority: medium
+    tier: 2
+    description: "Realized price for LTH"
+
+  - name: realized_price_sth
+    endpoint: realizedprice
+    data_field: realized_price_sth
+    priority: medium
+    tier: 2
+    description: "Realized price for STH"
+
+  # ==========================================================================
+  # COINTIME ECONOMICS (Medium - advanced analysis)
+  # ==========================================================================
+
+  - name: liveliness
+    endpoint: cointime_statistics
+    data_field: liveliness
+    priority: medium
+    tier: 1
+    description: "Network economic activity measure"
+
+  - name: vaultedness
+    endpoint: cointime_statistics
+    data_field: vaultedness
+    priority: medium
+    tier: 1
+    description: "Proportion of inactive/dormant supply"
+
+  - name: supply_active
+    endpoint: cointime_statistics
+    data_field: supply_active
+    priority: medium
+    tier: 1
+    description: "Actively participating supply"
+
+  - name: supply_vaulted
+    endpoint: cointime_statistics
+    data_field: supply_vaulted
+    priority: medium
+    tier: 1
+    description: "Dormant/vaulted supply"
+
+  - name: true_market_mean_price
+    endpoint: cointime_statistics
+    data_field: true_market_meanprice
+    priority: medium
+    tier: 2
+    description: "Cost basis of actively traded supply"
+
+  - name: investor_cap
+    endpoint: cointime_statistics
+    data_field: investor_cap
+    priority: medium
+    tier: 2
+    description: "Investor-driven component of realized cap"
+
+  - name: thermo_cap
+    endpoint: cointime_statistics
+    data_field: thermo_cap
+    priority: medium
+    tier: 1
+    description: "Cumulative USD value of all mined BTC"
+
+  # ==========================================================================
+  # DORMANCY & COIN DAYS (Medium - old coin movement)
+  # ==========================================================================
+
+  - name: coindays_destroyed
+    endpoint: utxo_dormancy
+    data_field: coindays_destroyed
+    priority: medium
+    tier: 1
+    description: "Total coin days destroyed"
+
+  - name: asol
+    endpoint: utxo_dormancy
+    data_field: asol
+    priority: medium
+    tier: 1
+    description: "Average Spent Output Lifespan"
+
+  - name: dormancy
+    endpoint: utxo_dormancy
+    data_field: dormancy_raw
+    priority: medium
+    tier: 1
+    description: "Average age of spent outputs"
+
+  # ==========================================================================
+  # NETWORK METRICS (Medium - fundamentals)
+  # ==========================================================================
+
+  - name: hashrate
+    endpoint: network_statistics
+    data_field: hashrate
+    priority: medium
+    tier: 0
+    description: "Network hashrate"
+
+  - name: difficulty
+    endpoint: network_statistics
+    data_field: difficulty
+    priority: medium
+    tier: 0
+    description: "Mining difficulty"
+
+  - name: tx_count
+    endpoint: network_statistics
+    data_field: txs_n
+    priority: medium
+    tier: 0
+    description: "Transaction count"
+
+  - name: utxo_increase
+    endpoint: network_statistics
+    data_field: utxo_increase
+    priority: low
+    tier: 0
+    description: "Net change in UTXO set"
+
+  # ==========================================================================
+  # FEE METRICS (Medium - demand indicators)
+  # ==========================================================================
+
+  - name: fee_total
+    endpoint: fees
+    data_field: fee_total
+    priority: medium
+    tier: 0
+    description: "Total transaction fees (BTC)"
+
+  - name: fee_total_usd
+    endpoint: fees
+    data_field: fee_total_usd
+    priority: medium
+    tier: 0
+    description: "Total transaction fees (USD)"
+
+  - name: fee_avg
+    endpoint: fees
+    data_field: fee_avg
+    priority: low
+    tier: 0
+    description: "Average transaction fee"
+
+  # ==========================================================================
+  # VOLUME METRICS (Medium - activity measures)
+  # ==========================================================================
+
+  - name: volume_btc
+    endpoint: volume
+    data_field: spent_tx_volume_btc
+    priority: medium
+    tier: 0
+    description: "Transaction volume in BTC"
+
+  - name: volume_usd
+    endpoint: volume
+    data_field: spent_tx_volume_usd
+    priority: medium
+    tier: 0
+    description: "Transaction volume in USD"
+
+  - name: volume_btc_adjusted
+    endpoint: volume
+    data_field: spent_tx_volume_btc_excl_dust
+    priority: medium
+    tier: 1
+    description: "Volume excluding dust"
+
+  # ==========================================================================
+  # UNREALIZED P&L (Medium - market positioning)
+  # ==========================================================================
+
+  - name: unrealized_profit
+    endpoint: unrealizedprofit
+    data_field: unrealized_profit
+    priority: medium
+    tier: 1
+    description: "Total unrealized profit"
+
+  - name: unrealized_loss
+    endpoint: unrealizedloss
+    data_field: unrealized_loss
+    priority: medium
+    tier: 1
+    description: "Total unrealized loss"
+
+  - name: unrealized_cap
+    endpoint: unrealizedcap
+    data_field: unrealized_cap
+    priority: medium
+    tier: 1
+    description: "Unrealized capitalization"
+
+  # ==========================================================================
+  # REALIZED P&L (Medium - actual taking of profits/losses)
+  # ==========================================================================
+
+  - name: realized_profit
+    endpoint: realizedprofit
+    data_field: realized_profit
+    priority: medium
+    tier: 1
+    description: "Daily realized profit"
+
+  - name: realized_loss
+    endpoint: realizedloss
+    data_field: realized_loss
+    priority: medium
+    tier: 1
+    description: "Daily realized loss"

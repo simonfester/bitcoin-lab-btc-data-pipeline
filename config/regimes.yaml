@@ -1,0 +1,107 @@
+# Bitcoin Market Regimes
+# ======================
+# Manually defined bull and bear market periods based on historical cycles.
+#
+# Bull = Primary uptrend, making higher highs
+# Bear = Primary downtrend, >50% drawdown from cycle high
+# 
+# These are approximate - edges are fuzzy in reality.
+
+regimes:
+
+  # ---------------------------------------------------------------------------
+  # 2015-2018 Cycle
+  # ---------------------------------------------------------------------------
+  
+  - name: "2015 Bear Bottom"
+    type: bear
+    start: "2015-01-01"
+    end: "2015-10-01"
+    notes: "Post-Mt.Gox bottom, accumulation phase"
+
+  - name: "2015-2017 Bull Run"
+    type: bull
+    start: "2015-10-01"
+    end: "2017-12-17"
+    notes: "Bull run to $20k ATH"
+
+  - name: "2018 Bear Market"
+    type: bear
+    start: "2017-12-17"
+    end: "2018-12-15"
+    notes: "ICO bust, 84% drawdown to ~$3.2k"
+
+  # ---------------------------------------------------------------------------
+  # 2019-2022 Cycle
+  # ---------------------------------------------------------------------------
+
+  - name: "2019 Recovery"
+    type: bull
+    start: "2018-12-15"
+    end: "2019-06-26"
+    notes: "Relief rally to $13k"
+
+  - name: "2019 Correction"
+    type: bear
+    start: "2019-06-26"
+    end: "2020-03-13"
+    notes: "Correction + COVID crash to $3.8k"
+
+  - name: "2020-2021 Bull Run"
+    type: bull
+    start: "2020-03-13"
+    end: "2021-11-10"
+    notes: "Post-COVID bull to $69k ATH"
+
+  - name: "2022 Bear Market"
+    type: bear
+    start: "2021-11-10"
+    end: "2022-11-21"
+    notes: "Luna/FTX collapse, 77% drawdown to ~$15.5k"
+
+  # ---------------------------------------------------------------------------
+  # 2023+ Cycle
+  # ---------------------------------------------------------------------------
+
+  - name: "2023-2024 Recovery"
+    type: bull
+    start: "2022-11-21"
+    end: "2024-03-14"
+    notes: "ETF approval rally to $73k"
+
+  - name: "2024 Consolidation"
+    type: bear  # or could be 'sideways'
+    start: "2024-03-14"
+    end: "2024-09-01"
+    notes: "Post-ETF correction/consolidation"
+
+  - name: "2024-Present Bull"
+    type: bull
+    start: "2024-09-01"
+    end: "2026-12-31"  # Open-ended
+    notes: "Current cycle, new ATHs"
+
+
+# ---------------------------------------------------------------------------
+# Alternative: Simple cycle definitions (top-to-top)
+# ---------------------------------------------------------------------------
+
+cycles:
+
+  - name: "Cycle 1"
+    bull_start: "2015-01-01"
+    bull_end: "2017-12-17"
+    bear_start: "2017-12-17"
+    bear_end: "2018-12-15"
+    
+  - name: "Cycle 2"
+    bull_start: "2018-12-15"
+    bull_end: "2021-11-10"
+    bear_start: "2021-11-10"
+    bear_end: "2022-11-21"
+
+  - name: "Cycle 3"
+    bull_start: "2022-11-21"
+    bull_end: null  # TBD
+    bear_start: null
+    bear_end: null
