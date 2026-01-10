@@ -31,7 +31,7 @@ wheels/
 *.egg
 
 # =============================================================================
-# DATA FILES (large, re-downloadable from API)
+# DATA FILES (large, re-downloadable or regeneratable)
 # =============================================================================
 *.parquet
 *.csv
@@ -40,10 +40,15 @@ data/processed/*
 data/features/*
 data/combined_metrics.*
 
+# Results (can be regenerated)
+data/results/screens/*.json
+data/results/backtests/*.json
+data/results/walk_forward/*.json
+
+# Signals (keep these - they're the output)
+# data/signals/*.json
+
 # Keep directory structure with .gitkeep
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/features/.gitkeep
 !**/.gitkeep
 
 # =============================================================================

@@ -1,0 +1,73 @@
+{
+  "strategies": [
+    {
+      "id": "STRAT-001",
+      "name": "SOPR Double Capitulation + MVRV Trail",
+      "status": "PAPER-READY",
+      "created": "2025-01-09",
+      "updated": "2025-01-10",
+      "metrics": {
+        "beat_rate": 0.62,
+        "avg_excess": -0.071,
+        "robustness": "32/35 configs beat baseline"
+      },
+      "entry": {
+        "conditions": [
+          {"metric": "sopr", "operator": "<", "value": 1},
+          {"metric": "sopr_sth", "operator": "<", "value": 1}
+        ],
+        "logic": "AND",
+        "trigger": "first_day"
+      },
+      "exit": {
+        "primary": {
+          "trigger": {"metric": "mvrv", "operator": ">", "value": 2.25},
+          "action": "activate_trailing_stop",
+          "trailing_pct": 0.20
+        },
+        "stop_loss": {
+          "type": "percent_from_entry",
+          "value": 0.20
+        },
+        "max_hold_days": 365
+      },
+      "files": [
+        "research/18_mvrv_grid_search.ipynb",
+        "data/mvrv_grid_search_results.json"
+      ],
+      "notes": "Best on average: MVRV > 2.75, 30% trail. Consider testing both."
+    }
+  ],
+  "ideas_backlog": [
+    {"id": "IDEA-001", "name": "Supply in Profit < 50% entry", "priority": "high"},
+    {"id": "IDEA-002", "name": "MVRV Z-Score < 0 entry", "priority": "high"},
+    {"id": "IDEA-003", "name": "Realized Loss spike entry", "priority": "medium"},
+    {"id": "IDEA-004", "name": "NUPL > 0.75 exit trigger", "priority": "medium"},
+    {"id": "IDEA-005", "name": "LTH/STH ratio extremes", "priority": "medium"},
+    {"id": "IDEA-006", "name": "NVT extremes", "priority": "low"},
+    {"id": "IDEA-007", "name": "Multi-metric entry composite", "priority": "low"}
+  ],
+  "abandoned": [
+    {"id": "ABN-001", "name": "Liveliness < threshold", "beat_rate": 0.125, "reason": "Signal too slow"},
+    {"id": "ABN-002", "name": "SOPR + Price > 200 MA filter", "beat_rate": null, "reason": "Filter removes best entries"},
+    {"id": "ABN-003", "name": "SOPR + Distance from high filter", "beat_rate": 0.54, "reason": "No improvement"},
+    {"id": "ABN-004", "name": "SOPR exit on SOPR > 1.02", "beat_rate": 0.54, "reason": "No improvement"},
+    {"id": "ABN-005", "name": "MVRV > 3.0 hard exit", "beat_rate": 0.62, "reason": "Misleading - stop loss did work"}
+  ],
+  "status_definitions": {
+    "EXPLORING": "Initial idea, still testing",
+    "BACKTESTED": "Walk-forward complete, results documented",
+    "PAPER-READY": "Meets criteria, ready for paper trading",
+    "PAPER-TESTING": "Currently paper trading",
+    "LIVE": "Running with real capital",
+    "ABANDONED": "Tested, didn't work",
+    "PAUSED": "Was promising, need to revisit"
+  },
+  "paper_ready_criteria": {
+    "min_beat_rate": 0.55,
+    "robustness_check": true,
+    "clear_entry_rules": true,
+    "clear_exit_rules": true,
+    "documented": true
+  }
+}

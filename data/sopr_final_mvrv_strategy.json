@@ -1,0 +1,51 @@
+{
+  "best_strategy": {
+    "name": "MVRV>3 only",
+    "beat_rate": 0.625,
+    "avg_excess": -0.08144122339076561
+  },
+  "strategy_details": {
+    "entry": "SOPR < 1 AND STH_SOPR < 1",
+    "exit_mvrv": 3.0,
+    "stop_loss": 0.2,
+    "trailing_stop": null,
+    "min_profit_to_trail": null
+  },
+  "all_strategies_tested": [
+    {
+      "strategy": "MVRV>3 only",
+      "beat_rate": 0.625,
+      "avg_excess": -0.08144122339076561
+    },
+    {
+      "strategy": "MVRV>3 + 15% trail @20%",
+      "beat_rate": 0.625,
+      "avg_excess": -0.07322287046322416
+    },
+    {
+      "strategy": "MVRV>3 + 20% trail @30%",
+      "beat_rate": 0.625,
+      "avg_excess": -0.06667475392973234
+    },
+    {
+      "strategy": "MVRV>3 + 25% trail @50%",
+      "beat_rate": 0.625,
+      "avg_excess": -0.08144122339076561
+    },
+    {
+      "strategy": "MVRV>2.5 + 15% trail @20%",
+      "beat_rate": 0.5833333333333334,
+      "avg_excess": -0.08747220216020542
+    },
+    {
+      "strategy": "MVRV>2.5 + 20% trail @30%",
+      "beat_rate": 0.5833333333333334,
+      "avg_excess": -0.08086022923500717
+    }
+  ],
+  "progression": {
+    "baseline_trailing_stop": 0.54,
+    "mvrv_3_plus_sl": 0.625,
+    "best_combined": 0.625
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "signal": "sopr_double_capitulation",
+  "entry": "SOPR < 1 AND STH_SOPR < 1",
+  "best_momentum_filter": "No Filter (baseline)",
+  "exit_strategy": "trailing_stop",
+  "exit_params": {
+    "stop_loss": 0.08,
+    "trailing_stop": 0.12,
+    "min_profit_to_trail": 0.05
+  },
+  "with_filter": {
+    "total_return": 55.58203847573328,
+    "win_rate": 0.44,
+    "profit_factor": 4.847310652022924,
+    "n_trades": 50,
+    "wf_beat_hold": 0.5416666666666666,
+    "wf_avg_excess": -0.049596835205435265
+  },
+  "without_filter": {
+    "total_return": 55.58203847573328,
+    "win_rate": 0.44,
+    "profit_factor": 4.847310652022924,
+    "n_trades": 50,
+    "wf_beat_hold": 0.5416666666666666,
+    "wf_avg_excess": -0.049596835205435265
+  },
+  "all_filters_tested": [
+    {
+      "filter": "No Filter (baseline)",
+      "n_trades": 50,
+      "filtered_out": 0,
+      "total_return": 55.58203847573328,
+      "win_rate": 0.44,
+      "avg_win": 0.3932371446818815,
+      "avg_loss": -0.06374092036397681,
+      "profit_factor": 4.847310652022924,
+      "avg_days": 40.98
+    },
+    {
+      "filter": "Price > 50 OR Price > 200",
+      "n_trades": 36,
+      "filtered_out": 104,
+      "total_return": 22.931496457083977,
+      "win_rate": 0.4722222222222222,
+      "avg_win": 0.4002783179793105,
+      "avg_loss": -0.06682927506657793,
+      "profit_factor": 5.3590848895969305,
+      "avg_days": 41.02777777777778
+    },
+    {
+      "filter": "Price > 100 MA",
+      "n_trades": 24,
+      "filtered_out": 160,
+      "total_return": 20.39559871223922,
+      "win_rate": 0.4583333333333333,
+      "avg_win": 0.5553590339999276,
+      "avg_loss": -0.057851488187213515,
+      "profit_factor": 8.122853833848065,
+      "avg_days": 43.375
+    },
+    {
+      "filter": "Price > 20 MA",
+      "n_trades": 24,
+      "filtered_out": 160,
+      "total_return": 17.201349948728332,
+      "win_rate": 0.4166666666666667,
+      "avg_win": 0.6266532752051905,
+      "avg_loss": -0.07084945833944321,
+      "profit_factor": 6.317754472375821,
+      "avg_days": 46.375
+    },
+    {
+      "filter": "Price > 50 MA",
+      "n_trades": 23,
+      "filtered_out": 166,
+      "total_return": 9.405079267201934,
+      "win_rate": 0.5217391304347826,
+      "avg_win": 0.3510559677111315,
+      "avg_loss": -0.0673592779517703,
+      "profit_factor": 5.685484735572298,
+      "avg_days": 44.04347826086956
+    },
+    {
+      "filter": "50 MA > 200 MA",
+      "n_trades": 30,
+      "filtered_out": 114,
+      "total_return": 3.887945520920316,
+      "win_rate": 0.36666666666666664,
+      "avg_win": 0.3834159195734099,
+      "avg_loss": -0.0598045195075733,
+      "profit_factor": 3.71172010870606,
+      "avg_days": 36.833333333333336
+    },
+    {
+      "filter": "Price > 200 AND 50 > 200",
+      "n_trades": 23,
+      "filtered_out": 149,
+      "total_return": 1.7402793407317505,
+      "win_rate": 0.34782608695652173,
+      "avg_win": 0.42256314526417443,
+      "avg_loss": -0.0657085472244526,
+      "profit_factor": 3.429797497085618,
+      "avg_days": 34.43478260869565
+    },
+    {
+      "filter": "Price > 200 MA",
+      "n_trades": 26,
+      "filtered_out": 144,
+      "total_return": 1.5832646573971014,
+      "win_rate": 0.34615384615384615,
+      "avg_win": 0.37719912275549544,
+      "avg_loss": -0.06391648622566251,
+      "profit_factor": 3.1242902264442765,
+      "avg_days": 35.0
+    },
+    {
+      "filter": "Price > 50 AND 50 > 200",
+      "n_trades": 11,
+      "filtered_out": 211,
+      "total_return": -0.20476819572580807,
+      "win_rate": 0.2727272727272727,
+      "avg_win": 0.09538695108484684,
+      "avg_loss": -0.0597220121300944,
+      "profit_factor": 0.5989434277414897,
+      "avg_days": 32.0
+    }
+  ]
+}

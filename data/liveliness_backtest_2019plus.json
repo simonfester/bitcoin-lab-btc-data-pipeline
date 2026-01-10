@@ -1,0 +1,14 @@
+{
+  "signal": "liveliness",
+  "direction": "below",
+  "threshold": 0.6066344047024594,
+  "data_start": "2019+",
+  "in_sample_sharpe": 1.7573969713384352,
+  "in_sample_return": 13.21563388171285,
+  "in_sample_excess": -13.906398492387869,
+  "oos_sharpe": Infinity,
+  "oos_return": 0.050362120496250634,
+  "beat_hold_pct": 0.125,
+  "smoothness": 0.13477467750582955,
+  "n_folds": 24
+}

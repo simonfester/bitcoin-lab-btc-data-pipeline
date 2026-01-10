@@ -1,0 +1,173 @@
+{
+  "signal": "double_capitulation",
+  "entry_condition": "SOPR < 1 AND STH_SOPR < 1",
+  "best_exit_strategy": "Trail_15%",
+  "exit_params": {
+    "trailing_stop": 0.15,
+    "max_hold_days": 90
+  },
+  "in_sample": {
+    "total_return": 7.297210700611622,
+    "win_rate": 0.4418604651162791,
+    "profit_factor": 2.2589015433043214,
+    "n_trades": 43,
+    "avg_days": 48.30232558139535
+  },
+  "walk_forward": {
+    "beat_hold_pct": 0.4583333333333333,
+    "avg_excess_return": -0.10580388113127524,
+    "n_folds": 24
+  },
+  "all_strategies_tested": [
+    {
+      "strategy": "Trail_15%",
+      "n_trades": 43,
+      "total_return": 7.297210700611622,
+      "win_rate": 0.4418604651162791,
+      "avg_win": 0.34841592380050673,
+      "avg_loss": -0.1221077004557053,
+      "profit_factor": 2.2589015433043214,
+      "avg_days": 48.30232558139535
+    },
+    {
+      "strategy": "Trail20_SL10",
+      "n_trades": 41,
+      "total_return": 7.160846996396025,
+      "win_rate": 0.3902439024390244,
+      "avg_win": 0.43989345470228425,
+      "avg_loss": -0.11957226119050597,
+      "profit_factor": 2.354490984835666,
+      "avg_days": 49.78048780487805
+    },
+    {
+      "strategy": "SL_10%",
+      "n_trades": 40,
+      "total_return": 5.690221894464717,
+      "win_rate": 0.4,
+      "avg_win": 0.4449938622660313,
+      "avg_loss": -0.1343819833733936,
+      "profit_factor": 2.207606759454611,
+      "avg_days": 51.7
+    },
+    {
+      "strategy": "SL_15%",
+      "n_trades": 32,
+      "total_return": 4.919410696323407,
+      "win_rate": 0.46875,
+      "avg_win": 0.4001105042491962,
+      "avg_loss": -0.1555556597468033,
+      "profit_factor": 2.2695328527069814,
+      "avg_days": 66.78125
+    },
+    {
+      "strategy": "Trail_20%",
+      "n_trades": 32,
+      "total_return": 4.832142458124626,
+      "win_rate": 0.46875,
+      "avg_win": 0.3823338254714882,
+      "avg_loss": -0.14444293389404086,
+      "profit_factor": 2.335547792621629,
+      "avg_days": 65.28125
+    },
+    {
+      "strategy": "PT_30%",
+      "n_trades": 29,
+      "total_return": 2.646628937923189,
+      "win_rate": 0.5862068965517241,
+      "avg_win": 0.25978474008237784,
+      "avg_loss": -0.17988493901944455,
+      "profit_factor": 2.0459099232514784,
+      "avg_days": 68.06896551724138
+    },
+    {
+      "strategy": "PT30_SL15",
+      "n_trades": 35,
+      "total_return": 1.4574356403697153,
+      "win_rate": 0.4857142857142857,
+      "avg_win": 0.2724965427303295,
+      "avg_loss": -0.157558354896974,
+      "profit_factor": 1.6334128779160066,
+      "avg_days": 52.4
+    },
+    {
+      "strategy": "PT20_SL10",
+      "n_trades": 52,
+      "total_return": 0.8459161414275063,
+      "win_rate": 0.4423076923076923,
+      "avg_win": 0.211256448654804,
+      "avg_loss": -0.12131846027830794,
+      "profit_factor": 1.3810611964104833,
+      "avg_days": 30.134615384615383
+    },
+    {
+      "strategy": "PT_20%",
+      "n_trades": 32,
+      "total_return": 0.6814608562854227,
+      "win_rate": 0.625,
+      "avg_win": 0.19023796106759913,
+      "avg_loss": -0.19720772133999795,
+      "profit_factor": 1.6077629531521358,
+      "avg_days": 56.8125
+    },
+    {
+      "strategy": "PT_10%",
+      "n_trades": 34,
+      "total_return": 0.6010223643188781,
+      "win_rate": 0.7352941176470589,
+      "avg_win": 0.10499447404293537,
+      "avg_loss": -0.18026074710846793,
+      "profit_factor": 1.6179413514270906,
+      "avg_days": 50.088235294117645
+    },
+    {
+      "strategy": "SOPR_1.05",
+      "n_trades": 54,
+      "total_return": 0.33819439006220375,
+      "win_rate": 0.6296296296296297,
+      "avg_win": 0.10434506201657351,
+      "avg_loss": -0.1250289640710269,
+      "profit_factor": 1.4187640979525715,
+      "avg_days": 27.296296296296298
+    },
+    {
+      "strategy": "PT20_Trail15",
+      "n_trades": 48,
+      "total_return": -0.10106836326529278,
+      "win_rate": 0.3958333333333333,
+      "avg_win": 0.2071011048776624,
+      "avg_loss": -0.11671209511902401,
+      "profit_factor": 1.1625781427669688,
+      "avg_days": 33.1875
+    },
+    {
+      "strategy": "SOPR_SL10",
+      "n_trades": 112,
+      "total_return": -0.5610182521601412,
+      "win_rate": 0.5535714285714286,
+      "avg_win": 0.04928625542621832,
+      "avg_loss": -0.07033115725938777,
+      "profit_factor": 0.8689599191879231,
+      "avg_days": 8.767857142857142
+    },
+    {
+      "strategy": "SOPR_PT20_SL10",
+      "n_trades": 114,
+      "total_return": -0.5685945378084223,
+      "win_rate": 0.5526315789473685,
+      "avg_win": 0.050187882140291594,
+      "avg_loss": -0.0711083599470024,
+      "profit_factor": 0.8718636687904596,
+      "avg_days": 8.421052631578947
+    },
+    {
+      "strategy": "SOPR_1.02",
+      "n_trades": 101,
+      "total_return": -0.6688467294291858,
+      "win_rate": 0.5742574257425742,
+      "avg_win": 0.047505416677663614,
+      "avg_loss": -0.07812430001876494,
+      "profit_factor": 0.8201938915657875,
+      "avg_days": 11.356435643564357
+    }
+  ]
+}
