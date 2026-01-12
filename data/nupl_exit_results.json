@@ -1,0 +1,58 @@
+{
+  "signal": "nupl_exit",
+  "walk_forward_results": [
+    {
+      "threshold": 0.5,
+      "beat_rate": 0.5,
+      "avg_excess": -0.0724957664889805,
+      "total_trades": 30
+    },
+    {
+      "threshold": 0.55,
+      "beat_rate": 0.5416666666666666,
+      "avg_excess": -0.06644438638085463,
+      "total_trades": 28
+    },
+    {
+      "threshold": 0.6,
+      "beat_rate": 0.5416666666666666,
+      "avg_excess": -0.06644438638085463,
+      "total_trades": 28
+    },
+    {
+      "threshold": 0.65,
+      "beat_rate": 0.5416666666666666,
+      "avg_excess": -0.06644438638085463,
+      "total_trades": 28
+    },
+    {
+      "threshold": 0.7,
+      "beat_rate": 0.5416666666666666,
+      "avg_excess": -0.07192922688876381,
+      "total_trades": 28
+    },
+    {
+      "threshold": 0.75,
+      "beat_rate": 0.5416666666666666,
+      "avg_excess": -0.07192922688876381,
+      "total_trades": 28
+    },
+    {
+      "threshold": 0.8,
+      "beat_rate": 0.5416666666666666,
+      "avg_excess": -0.07192922688876381,
+      "total_trades": 28
+    }
+  ],
+  "best_nupl_exit": {
+    "threshold": 0.55,
+    "beat_rate": 0.5416666666666666,
+    "avg_excess": -0.06644438638085463,
+    "total_trades": 28.0
+  },
+  "baseline_mvrv": {
+    "threshold": 2.25,
+    "beat_rate": 0.62
+  },
+  "nupl_mvrv_correlation": 0.9023724646271188
+}

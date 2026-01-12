@@ -21,17 +21,147 @@ A structured tracker for strategies from exploration → paper testing → live.
 ## 🎯 Criteria for Paper-Ready
 
 A strategy must have:
-- [ ] Walk-forward beat rate > 55%
-- [ ] Tested across multiple parameter values (robustness check)
-- [ ] Clear entry rules (no ambiguity)
-- [ ] Clear exit rules (no ambiguity)
-- [ ] Documented in LESSONS_LEARNED.md
+- [x] Walk-forward beat rate > 55%
+- [x] Tested across multiple parameter values (robustness check)
+- [x] Clear entry rules (no ambiguity)
+- [x] Clear exit rules (no ambiguity)
+- [x] Documented in LESSONS_LEARNED.md
+- [x] **Regime filter tested** (result: not needed for contrarian strategies)
 
 ---
 
 ## 📋 Strategy Registry
 
-### STRAT-001: SOPR Double Capitulation + MVRV Trail
+### ⭐ STRAT-002: SOPR + Realized Loss + Simple Trail (LONG-TERM)
+
+| Field | Value |
+|-------|-------|
+| **Status** | ✅ VALIDATED - DEPLOY & FORGET |
+| **Created** | 2025-01-10 |
+| **Last Updated** | 2025-01-11 |
+| **Trade Frequency** | ~1-2 trades/year |
+| **Avg Hold Period** | 300-500 days |
+| **Best For** | Long-term wealth building |
+| **Current Version** | v5 (simple trail), v6 (realized exit) pending validation |
+
+**Entry Rules:**
+```
+BUY when:
+  - SOPR < 1 (market selling at loss)
+  - AND STH_SOPR < 1 (short-term holders also selling at loss)
+  - AND Realized Loss Z-Score > 0.5 (above average losses being realized)
+  - First day all conditions are true (not continuation)
+```
+
+**Exit Rules (v5 - Current):**
+```
+SELL when:
+  - Price drops 30% from peak (simple trailing stop, always active)
+  - That's it. No MVRV trigger, no stop loss, no time limit.
+```
+
+**Exit Rules (v6 - Testing):**
+```
+SELL when:
+  - Before trigger: 30% trailing stop
+  - After MVRV > 2.0 + SOPR > 1.05: tighten to 15-20% trail
+  - Uses REALIZED profit-taking as exit signal
+```
+
+**Backtest Results (2019-2026) - v5 VectorBT Validated:**
+```
+Total Return:    +5,754%
+Buy & Hold:      +2,268%
+CAGR:            +77.8%
+
+Sharpe:          1.45
+Sortino:         2.21
+Win Rate:        62%
+Profit Factor:   6.69
+Max Drawdown:    -63.8%
+Total Trades:    8
+
+$100,000 → $5,853,745
+```
+
+**Key Files:**
+- `research/21_realized_loss_entry.ipynb` - Entry signal discovery
+- `research/31_exit_strategy_comparison.ipynb` - Exit comparison (found simple > MVRV)
+- `research/41_historical_bottoms_analysis.ipynb` - Bottom analysis (100% caught)
+- `research/42_historical_tops_analysis.ipynb` - Top analysis (exit timing)
+- `research/44_realized_profit_exit.ipynb` - Realized exit discovery
+- `research/45_strat002_v6_realized_exit.ipynb` - v6 comparison test
+- `data/strat002_backtest_results.json` - Full results
+
+**Notes:**
+- Simple 30% trail DOUBLED returns vs complex MVRV trail (+7,298% vs +3,643%)
+- Removed MVRV trigger - was causing edge case losses
+- Removed stop loss - trail handles all exits
+- Simpler = fewer edge cases = better performance
+- ✅ Principle confirmed: "Simpler is better"
+- ⚠️ **NOT for paper trading** - too infrequent, just deploy and monitor
+- Currently has 1 open position (as of 2025-01-11)
+- 🆕 v6 uses REALIZED exit (SOPR > 1.05) - +31% better in short-term test
+
+---
+
+### ⭐ STRAT-003: Short-Term Active Trading
+
+| Field | Value |
+|-------|-------|
+| **Status** | ✅ VALIDATED - PAPER READY |
+| **Created** | 2025-01-11 |
+| **Trade Frequency** | ~9 trades/year |
+| **Avg Hold Period** | 29 days |
+| **Best For** | Active trading, paper testing |
+
+**Entry Rules:**
+```
+BUY when:
+  - STH-SOPR < 1 (short-term holders selling at loss)
+  - First day condition is true
+```
+
+**Exit Rules:**
+```
+SELL when:
+  - Price drops 8% from peak (tight trailing stop)
+```
+
+**Backtest Results (2019-2026):**
+```
+Total Return:    +1,886%
+Sharpe:          0.86
+Max Drawdown:    -55%
+Win Rate:        40%
+Total Trades:    65 (9.3/year)
+Avg Hold:        29 days
+```
+
+**Key Insights:**
+- Same entry as STRAT-002 but simpler (just STH-SOPR)
+- Tighter 8% trail = more trades, shorter holds
+- 40% win rate offset by big winners
+- Adaptive trails tested but simple trail won
+- Good for paper trading - enough signals for feedback
+- 🆕 Realized exit (MVRV + SOPR > 1.05) showed +31% improvement - worth testing!
+
+**v2 Exit Option (Testing):**
+```
+SELL when:
+  - Before trigger: 15% trail
+  - After MVRV > 2.0 + SOPR > 1.05: tighten to 10% trail
+```
+
+**Key Files:**
+- `research/40_sth_sopr_only.ipynb` - STH-SOPR entry test
+- `research/41_historical_bottoms_analysis.ipynb` - Bottom analysis
+- `research/42_historical_tops_analysis.ipynb` - Top analysis  
+- `research/43_adaptive_trail_strategy.ipynb` - Adaptive trail tests
+
+---
+
+### STRAT-001: SOPR Double Capitulation + MVRV Trail (Original)
 
 | Field | Value |
 |-------|-------|
@@ -39,7 +169,7 @@ A strategy must have:
 | **Created** | 2025-01-09 |
 | **Last Updated** | 2025-01-10 |
 | **Beat Rate** | 62% |
-| **Robustness** | 32/35 configs beat baseline |
+| **Robustness** | 32/35 configs beat baseline (91%) |
 
 **Entry Rules:**
 ```
@@ -62,37 +192,10 @@ SELL when:
 - `data/mvrv_grid_search_results.json` - Results
 
 **Notes:**
-- Best single config: MVRV > 2.25, 20% trail
-- Best on average: MVRV > 2.75, 30% trail
-- Consider testing both in paper trading
-
----
-
-### STRAT-002: [Template for Next Strategy]
-
-| Field | Value |
-|-------|-------|
-| **Status** | 🔬 EXPLORING |
-| **Created** | YYYY-MM-DD |
-| **Last Updated** | YYYY-MM-DD |
-| **Beat Rate** | TBD |
-| **Robustness** | TBD |
-
-**Entry Rules:**
-```
-TBD
-```
-
-**Exit Rules:**
-```
-TBD
-```
-
-**Key Files:**
-- TBD
-
-**Notes:**
-- TBD
+- Simpler entry (no RL filter)
+- Higher robustness (91% vs 53%) but lower beat rate
+- Good fallback if STRAT-002 underperforms in paper trading
+- ✅ **Regime filter tested** - not needed (contrarian signal + stop-loss provides protection)
 
 ---
 
@@ -102,12 +205,29 @@ Ideas to explore, not yet tested:
 
 | ID | Idea | Priority | Notes |
 |----|------|----------|-------|
-| IDEA-002 | MVRV Z-Score < 0 entry | High | Undervaluation signal |
-| IDEA-003 | Realized Loss spike entry | Medium | Capitulation event |
-| IDEA-004 | NUPL > 0.75 exit trigger | Medium | Alternative to MVRV |
+| **IDEA-008** | **Metric Group Analysis** | **HIGH** | Group metrics by type, find best from each, combine across groups |
 | IDEA-005 | LTH/STH ratio extremes | Medium | Supply dynamics |
 | IDEA-006 | NVT extremes | Low | Valuation signal |
-| IDEA-007 | Multi-metric entry composite | Low | Combine SOPR + Supply + MVRV Z |
+
+### IDEA-008: Metric Grouping Strategy
+
+**Concept:** Categorize metrics by what they measure, find the best signal from each category, then combine signals across categories (which should be uncorrelated).
+
+**Current Progress:**
+
+| Category | What It Measures | Best Metric | Status |
+|----------|------------------|-------------|--------|
+| **Profitability/Sentiment** | Are people in profit/loss? | SOPR + STH-SOPR | ✅ Done |
+| **Capitulation Intensity** | How much loss is being realized? | RL Z > 0.5 | ✅ Done |
+| **Valuation** | Is market over/undervalued? | MVRV > 2.0 (exit) | ✅ Done |
+| **Supply Distribution** | Who holds the coins? | TBD | 🔬 Next |
+| **Network Activity** | Is network being used? | TBD | Backlog |
+| **Cost Basis** | What did people pay? | TBD | Backlog |
+
+**Current Best Combined Strategy:**
+- Entry: Profitability (SOPR) + Intensity (RL Z)
+- Exit: Valuation (MVRV)
+- Result: 67% beat rate
 
 ---
 
@@ -122,8 +242,12 @@ Strategies tested and rejected (so we don't re-test them):
 | ABN-003 | SOPR + Distance from high filter | 54% | No improvement over baseline |
 | ABN-004 | SOPR exit on SOPR > 1.02 | 54% | No improvement, sentiment too noisy |
 | ABN-005 | MVRV > 3.0 hard exit | 62%* | *Misleading - stop loss did the work, MVRV only fired 2x |
-| ABN-006 | Supply in Profit < 50% entry | 38% | Too rare, less timely than SOPR (lagging) |
+| ABN-006 | Supply in Profit < 50% entry | 38% | Too rare, less timely than SOPR (lagging stock vs flow) |
 | ABN-007 | SOPR + SIP filter | 54% | Adding SIP filter reduces beat rate from 62% to 54% |
+| ABN-008 | MVRV Z-Score < 0 entry | 42% | Worse than SOPR, valuation signal too slow for entry |
+| ABN-009 | SOPR + MVRV Z filter | 58% | Filter reduces beat rate from 62% to 58% |
+| ABN-010 | MVRV Z > 2.5 exit | 62% | Ties MVRV > 2.25, no improvement - same signal type |
+| ABN-011 | NUPL > 0.75 exit | 54% | Worse than MVRV, 0.90 correlated (redundant) |
 
 ---
 
@@ -131,7 +255,13 @@ Strategies tested and rejected (so we don't re-test them):
 
 When a strategy moves to paper testing, log trades here:
 
-### STRAT-001 Paper Trades
+### STRAT-002 Paper Trades (Primary)
+
+| Date | Action | Price | SOPR | STH_SOPR | RL Z | MVRV | Notes |
+|------|--------|-------|------|----------|------|------|-------|
+| | | | | | | | |
+
+### STRAT-001 Paper Trades (Backup)
 
 | Date | Action | Price | SOPR | STH_SOPR | MVRV | Notes |
 |------|--------|-------|------|----------|------|-------|
