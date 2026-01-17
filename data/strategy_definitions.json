@@ -1,0 +1,38 @@
+{
+  "STRAT-002": {
+    "name": "Macro Capitulation",
+    "purpose": "Maximum returns, swing trading",
+    "timeframe": "1d",
+    "trail_stop": 0.3,
+    "entry": {
+      "sopr": "< 1",
+      "sopr_sth": "< 1",
+      "rl_zscore": "> 0.5"
+    },
+    "exit": "30% trailing stop",
+    "expected": {
+      "trades_per_year": 1.421206225680934,
+      "avg_hold_days": 248.9,
+      "win_rate": 50.0,
+      "cagr": 64.39230890115314
+    }
+  },
+  "STRAT-004": {
+    "name": "Income Generation",
+    "purpose": "Active income, more frequent trades",
+    "timeframe": "1h",
+    "trail_stop": 0.12,
+    "entry": {
+      "sopr": "< 1",
+      "sopr_sth": "< 1",
+      "rl_zscore": "> 0.5"
+    },
+    "exit": "12% trailing stop",
+    "expected": {
+      "trades_per_year": 14.638424124513618,
+      "avg_hold_days": 24.067961165046295,
+      "win_rate": 49.51456310679612,
+      "cagr": 63.859023404403125
+    }
+  }
+}

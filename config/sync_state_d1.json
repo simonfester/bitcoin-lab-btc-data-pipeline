@@ -1,0 +1,390 @@
+{
+  "last_sync": "2026-01-16T12:16:05.862903+00:00",
+  "metrics": {
+    "price": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:02.193048+00:00",
+      "row_count": 4032,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/price/price?resolution=d1&output_format=json&from_time=2026-01-15T00%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A01Z"
+    },
+    "market_cap": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:02.812700+00:00",
+      "row_count": 4032,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/marketcap/market_cap?resolution=d1&output_format=json&from_time=2026-01-15T00%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A02Z"
+    },
+    "mvrv": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:03.929410+00:00",
+      "row_count": 4032,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/market_value_to_realized_value/mvrv?resolution=d1&output_format=json&from_time=2026-01-15T00%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A02Z"
+    },
+    "mvrv_z": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:04.889044+00:00",
+      "row_count": 4032,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/market_value_to_realized_value/mvrv_z?resolution=d1&output_format=json&from_time=2026-01-15T00%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A03Z"
+    },
+    "mvrv_lth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:05.862626+00:00",
+      "row_count": 4032,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/market_value_to_realized_value/mvrv_lth?resolution=d1&output_format=json&from_time=2026-01-15T00%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A04Z"
+    },
+    "mvrv_sth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:29.586867+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "nvt": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:30.631882+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "sopr": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:31.664844+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "sopr_lth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:32.695748+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "sopr_sth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:33.809902+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "nupl": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:34.788346+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "nupl_lth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:35.645661+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "nupl_sth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:36.688433+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "net_realized_pnl": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:37.777586+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_in_profit": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:38.650688+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_in_profit_percent": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:39.699119+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_lth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:40.611757+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_sth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:41.660703+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_lth_sth_ratio": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:42.689705+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "realized_cap": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:43.699827+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "realized_price": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:44.620093+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "velocity": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:47.618302+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_in_loss": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:48.999066+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_total": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:49.761939+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "realized_cap_lth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:50.655350+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "realized_cap_sth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:51.685678+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "realized_price_lth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:52.664476+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "realized_price_sth": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:53.933641+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "liveliness": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:54.744248+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "vaultedness": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:55.818552+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_active": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:56.862023+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "supply_vaulted": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:57.729490+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "true_market_mean_price": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:58.952881+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "investor_cap": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:59.708272+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "thermo_cap": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:00.702563+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "coindays_destroyed": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:02.126976+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "asol": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:02.740378+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "dormancy": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:03.733622+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "hashrate": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:04.716012+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "difficulty": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:05.703822+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "tx_count": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:06.768867+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "fee_total": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:07.793692+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "fee_total_usd": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:08.842381+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "volume_btc": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:09.726460+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "volume_usd": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:10.733054+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "volume_btc_adjusted": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:11.742906+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "unrealized_profit": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:12.780042+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "unrealized_loss": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:13.832766+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "unrealized_cap": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:14.812944+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "realized_profit": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:15.754488+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "realized_loss": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:16.773423+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "utxo_increase": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:18.372523+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "fee_avg": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:06:18.830459+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "vaulted_price": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:45.617036+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    },
+    "aviv": {
+      "last_timestamp": "2026-01-14T00:00:00+00:00",
+      "last_sync": "2026-01-15T19:05:46.711118+00:00",
+      "row_count": 4032,
+      "status": "ok",
+      "error": null
+    }
+  }
+}

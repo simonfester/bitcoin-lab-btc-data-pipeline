@@ -4,6 +4,18 @@ A living document capturing insights from our signal research and backtesting.
 
 ---
 
+## 📍 Quick Navigation
+
+| Section | Description |
+|---------|-------------|
+| [📚 Key Principles](#-key-principles) | 21 core lessons from research |
+| [🎯 Master Signal Reference](#-master-signal-reference) | **⭐ START HERE** - Consolidated entry/exit signals |
+| [🔬 Tested Signals](#-tested-signals) | Detailed analysis of each metric |
+| [📊 Results Log](#-results-log) | Chronological test results |
+| [🔑 Key Takeaways](#-key-takeaways) | Top lessons summary |
+
+---
+
 ## 📚 Key Principles
 
 ### 1. Statistical Significance ≠ Trading Edge
@@ -492,7 +504,7 @@ Don't use UNREALIZED metrics for hard exits
 
 ---
 
-### 18. Realized Metrics Work for BOTH Entries AND Exits ⭐ NEW
+### 18. Realized Metrics Work for BOTH Entries AND Exits (Timeframe Dependent) ⭐ UPDATED
 
 **Discovery:** Just as SOPR < 1 (realized loss) marks bottoms, SOPR > 1.05 (realized profit) marks tops!
 
@@ -503,48 +515,342 @@ Don't use UNREALIZED metrics for hard exits
 | SOPR < 1 (selling at loss) | SOPR > 1.05 (selling at profit) |
 | Realized Loss spike | Realized Profit spike |
 | Capitulation IS happening | Distribution IS happening |
-| 100% of bottoms caught | Better exit timing |
+| 100% of bottoms caught | Better exit timing (short-term) |
+
+**Test Results - TIMEFRAME MATTERS:**
+
+| Strategy | Simple Trail | Realized Exit | Winner |
+|----------|--------------|---------------|--------|
+| **Long-term (30% trail)** | **+5,766%** | +3,712% | **Simple** ✅ |
+| **Short-term (8% trail)** | +1,144% | **+1,505%** | **Realized** ✅ |
+
+**Why Different Results?**
+
+| Factor | Long-Term | Short-Term |
+|--------|-----------|------------|
+| Base Trail | 30% (wide) | 8% (tight) |
+| Avg Hold | 300-500 days | 29 days |
+| Trades | 8 total | 65 total |
+| Effect of Tightening | Exits too early | Better timing |
+
+**The Nuance:**
+
+```
+LONG-TERM (wide trail):
+  - 30% trail already lets winners run
+  - Tightening to 15-20% = earlier exits
+  - With 8 trades, each early exit costs huge returns
+  - Simple wins: +5,766% vs +3,712%
+
+SHORT-TERM (tight trail):
+  - 8% trail is already aggressive
+  - Realized signal helps catch reversals
+  - With 65 trades, better timing compounds
+  - Realized wins: +1,505% vs +1,144%
+```
+
+**The Complete Framework:**
+
+```
+ENTRY (Both timeframes):
+  Context: Market sentiment negative
+  Trigger: SOPR < 1 (people ARE selling at loss)
+  = Capitulation IS happening → BUY
+
+EXIT (Timeframe dependent):
+  Long-term: Simple wide trail (30%) - let winners run
+  Short-term: Realized exit OR tight trail (8-15%)
+```
+
+**When to Use Realized Exit:**
+- ✅ Short-term strategies (tight base trail)
+- ✅ Frequent trading (more samples to benefit)
+- ✅ Goal is catching reversals quickly
+- ❌ Long-term strategies (wide base trail)
+- ❌ Few trades (each exit matters too much)
+- ❌ Goal is letting winners run to maximum
+
+**Lesson:** Realized metrics work for exits but are TIMEFRAME DEPENDENT. For long-term strategies, simple wide trails beat complex triggers. For short-term strategies, realized profit signals can improve timing. The principle "simpler is better" still holds for long-term wealth building.
+
+**Why This Matters:**
+- The insight about realized vs unrealized is STILL VALID for understanding WHY signals work
+- But APPLYING realized exit signals depends on your strategy timeframe
+- Long-term: Let winners run with wide trail (simple wins)
+- Short-term: Tighter timing matters (realized can help)
+
+---
+
+### 19. LTH-SOPR is the Best Exit Signal for Short-Term Strategies ⭐ NEW
+
+**Discovery:** Long-Term Holder SOPR provides a much stronger exit signal than STH-SOPR!
+
+**Why LTH-SOPR Works Better:**
+
+| Metric | STH-SOPR | LTH-SOPR |
+|--------|----------|----------|
+| Who | Traders (<155 days) | HODLers (>155 days) |
+| Behavior | Trade frequently, noisy | Rarely sell, deliberate |
+| Cost basis gap | Small (recent buys) | Huge (old buys) |
+| Value at tops | ~1.03 | ~5.0 |
+| Signal strength | Weak (always near 1) | Strong (5x = meaningful) |
+
+**At Major Tops:**
+```
+STH-SOPR at tops: ~1.03 (traders taking 3% profit - happens constantly)
+LTH-SOPR at tops: ~5.00 (HODLers taking 400% profit - rare, deliberate)
+```
 
 **Test Results:**
 
 | Exit Strategy | Return | Improvement |
 |---------------|--------|-------------|
-| Simple Trail | +1,144% | Baseline |
-| **Realized Exit** | **+1,505%** | **+31% better** |
+| Simple Trail | +2,970% | Baseline |
+| **LTH-SOPR > 1.5 Exit** | **+3,813%** | **+28% better** |
 
 **The Complete Framework:**
 
 ```
-ENTRY:
-  Context: Market sentiment negative
-  Trigger: SOPR < 1 (people ARE selling at loss)
-  = Capitulation IS happening → BUY
+ENTRY:  STH-SOPR < 1
+        = Short-term holders selling at LOSS
+        = Weak hands capitulating
+        = BUY from panic
 
-EXIT:
-  Context: MVRV > 2.0 (market expensive)
-  Trigger: SOPR > 1.05 (people ARE selling at profit)
-  = Distribution IS happening → SELL (via tighter trail)
+EXIT:   LTH-SOPR > 1.5 (with MVRV > 2.5 context)
+        = Long-term holders selling at BIG PROFIT
+        = Smart money distributing
+        = SELL to greed
 ```
 
-**Why MVRV Alone Fails for Exits:**
+**Why This Works:**
+- STH selling = Normal market noise
+- LTH selling = "I've held for YEARS, NOW I'm selling"
+- LTH distribution = Real cycle top behavior
+- 5x signal strength = Much clearer timing
+
+**Important Caveat:**
 ```
-MVRV > 2.5 = People COULD sell (unrealized)
-           = But they haven't yet!
-           = Still +10-25% upside after signal
-           = Too early
+✅ Works for: Short-term strategies
+   - Return: +3,813% (vs +2,970% simple trail)
+   - +28% improvement
 
-MVRV > 2.5 + SOPR > 1.05 = Expensive AND selling happening
-                         = Distribution confirmed
-                         = Better timing
+❌ Doesn't help: Long-term strategies
+   - Simple 30% trail: +7,827%
+   - LTH-SOPR exit: +4,974%
+   - Simple still wins for long-term!
 ```
 
-**The Principle:**
-- Unrealized metrics (MVRV, NUPL) tell you market STATE (expensive/cheap)
-- Realized metrics (SOPR, Realized P/L) tell you market ACTION (buying/selling)
-- STATE provides context, ACTION provides timing
-- Use BOTH: Context (MVRV) + Action (SOPR) = Optimal signal
+**Lesson:** Match your exit signal to who you're trying to detect. For exits, LTH behavior is more meaningful than STH behavior - they're the "smart money" with conviction. But this only helps short-term strategies where tighter timing matters.
 
-**Lesson:** The same logic that makes SOPR work for entries makes it work for exits. Realized metrics detect ACTION - whether that's panic selling (entries) or profit-taking (exits). Unrealized metrics only show potential, not behavior.
+---
+
+### 20. MVRV Z-Score Beats Raw MVRV for Triggered Exits ⭐ NEW
+
+**Discovery:** When using complex exit triggers, MVRV Z-Score outperforms raw MVRV.
+
+**Why MVRV Z is Better:**
+
+| Factor | Raw MVRV | MVRV Z-Score |
+|--------|----------|---------------|
+| Type | Absolute threshold | Relative to history |
+| Meaning | "Market cap is 2.5x realized" | "2 std devs above mean" |
+| Adapts to change? | No | Yes |
+| At major tops | ~2.5 | ~3.6 |
+| Statistical basis | None | Gaussian |
+
+**Test Results (STRAT-002 Long-Term):**
+
+| Exit Trigger | Return |
+|--------------|--------|
+| **Simple 30% trail** | **+6,122%** (still wins!) |
+| MVRV Z>2.5 + LTH>1.5 | +4,409% |
+| MVRV>2.5 + LTH>1.5 | +3,881% |
+
+**MVRV Z beat raw MVRV by +528%** for the same trigger logic.
+
+**Why Z-Score Adapts Better:**
+```
+2021 Bull Market:
+  MVRV = 3.0 might be "normal euphoria"
+  MVRV Z = 3.0 means "3 std devs above recent mean"
+
+2024 Bull Market:
+  Market structure changed (ETFs, institutions)
+  Raw MVRV thresholds may be outdated
+  Z-score auto-adjusts to new normal
+```
+
+**Important Caveat:**
+```
+✅ MVRV Z > raw MVRV for triggered exits
+❌ But simple trail STILL beats both for long-term!
+   Simple: +6,122%
+   MVRV Z: +4,409%
+   Raw MVRV: +3,881%
+```
+
+**When to Use What:**
+
+| Strategy | Best Exit |
+|----------|----------|
+| Long-term (STRAT-002) | Simple 30% trail |
+| Short-term (STRAT-003) | MVRV Z > 2.5 + LTH > 1.5 trigger |
+
+**Lesson:** If you're going to use complex triggered exits, use MVRV Z-Score instead of raw MVRV - it adapts to market structure changes. But for long-term strategies, simple trailing stops still win because they let winners run without premature exits.
+
+---
+
+### 21. Realized Price is an ENTRY Signal, Not EXIT ⭐ NEW
+
+**Discovery:** Using Realized Price as an exit stop HURTS performance massively!
+
+**The Failed Hypothesis:**
+```
+"If price drops below Realized Price, bear market is accelerating"
+"Exit to preserve gains"
+```
+
+**Test Results:**
+
+| Strategy | Baseline | With RP Stop | Difference |
+|----------|----------|--------------|------------|
+| STRAT-002 (Long) | +5,763% | +3,252% | **-2,511%** ❌ |
+| STRAT-003 (Short) | +2,634% | +816% | **-1,818%** ❌ |
+
+**Why RP Stop Fails:**
+```
+Price < Realized Price:
+  = Network is underwater on average
+  = Maximum capitulation
+  = MVRV < 1 (same thing)
+  = Forward returns are POSITIVE!
+  = This marks BOTTOMS, not danger!
+
+RP Stop sells at the WORST possible time.
+```
+
+**Historical Context:**
+- Price < RP only happened in 2018-2019 and 2022
+- These were the BEST buying opportunities
+- Forward 90d returns from below RP are strongly positive
+
+**Lesson:** Realized Price crossing is a BOTTOM indicator, not a top indicator. Using it as an exit stop sells at maximum fear - exactly wrong.
+
+---
+
+## 🎯 Master Signal Reference
+
+A consolidated reference of all validated entry and exit signals from this research.
+
+### ✅ ENTRY SIGNALS (What Marks Bottoms)
+
+| Signal | Type | Description | Validation |
+|--------|------|-------------|------------|
+| **SOPR < 1** | Realized | People ARE selling at loss | 100% of bottoms caught |
+| **STH-SOPR < 1** | Realized | Short-term holders panicking | Weak hands capitulating |
+| **Realized Loss Z > 0.5** | Realized | Above-average losses | Intensity filter |
+| **Price < Realized Price** | Valuation | Network underwater | MVRV < 1 equivalent |
+| **MVRV < 1** | Valuation | Market cap < realized cap | Deep value territory |
+
+**Entry Framework:**
+```
+BEST ENTRY = Direction + Intensity
+
+Direction: SOPR < 1 AND STH-SOPR < 1
+           (Capitulation IS happening)
+
+Intensity: Realized Loss Z > 0.5
+           (Meaningful capitulation, not noise)
+```
+
+### ✅ EXIT SIGNALS (What Marks Tops)
+
+| Signal | Type | Description | Best For |
+|--------|------|-------------|----------|
+| **Simple 30% Trail** | Price Action | Exit on 30% drop from peak | Long-term 🏆 |
+| **LTH-SOPR > 1.5** | Realized | Smart money distributing | Short-term trigger |
+| **MVRV Z > 2.5** | Valuation | Statistically expensive | Context for trigger |
+| **MVRV > 2.5** | Valuation | Market cap 2.5x realized | Context (less adaptive) |
+
+**Exit Framework:**
+```
+LONG-TERM STRATEGY:
+  Simple 30% trailing stop
+  No triggers, no complexity
+  Let winners run to maximum
+
+SHORT-TERM STRATEGY:
+  Context: MVRV Z > 2.5 (market expensive)
+  Trigger: LTH-SOPR > 1.5 (smart money selling)
+  Action: Tighten trail to 15%
+```
+
+### ❌ FAILED EXIT SIGNALS (Don't Use)
+
+| Signal | Why It Fails |
+|--------|-------------|
+| **Price < Realized Price** | Marks bottoms, not tops! Sells at worst time. |
+| **MVRV > 2.5 alone** | Unrealized = state, not action. +10-25% upside remains. |
+| **STH-SOPR > 1.05** | Too noisy, always near 1.0. Not meaningful. |
+| **SOPR > 1.02** | +22% forward returns - way too early! |
+| **Arbitrary time exits** | Market timing > calendar timing |
+
+### 💡 The Core Principle
+
+```
+┌───────────────────────────────────────────────────────┐
+│                    BOTTOMS                            │
+│                                                       │
+│  WHO: Short-term holders (weak hands)                │
+│  WHAT: Selling at LOSS (SOPR < 1)                     │
+│  WHY: Panic, margin calls, fear                       │
+│  ACTION: Capitulation IS happening                    │
+│                                                       │
+│  → BUY from weak hands                               │
+└───────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌───────────────────────────────────────────────────────┐
+│                     TOPS                              │
+│                                                       │
+│  WHO: Long-term holders (smart money)                 │
+│  WHAT: Selling at BIG PROFIT (LTH-SOPR > 1.5)         │
+│  WHY: Taking gains after years of holding             │
+│  ACTION: Distribution IS happening                    │
+│                                                       │
+│  → SELL to greedy late buyers                        │
+└───────────────────────────────────────────────────────┘
+
+             THE ASYMMETRY:
+             
+  At Bottoms: Panic is ACTION (must sell)
+  At Tops: Greed is STATE (can hold forever)
+  
+  → Use REALIZED metrics for entries (detect action)
+  → Use PRICE ACTION for exits (detect reversal)
+  → Use UNREALIZED metrics for context only
+```
+
+### 🏆 Final Validated Strategies
+
+**STRAT-002 (Long-Term Wealth Building):**
+```
+Entry: SOPR < 1 AND STH-SOPR < 1 AND RL Z > 0.5
+Exit:  Simple 30% trailing stop
+
+Return: +5,763% to +7,827%
+Trades: ~8 over 7 years
+Best for: Deploy and forget
+```
+
+**STRAT-003 (Active Trading):**
+```
+Entry: STH-SOPR < 1
+Exit:  MVRV Z > 2.5 + LTH-SOPR > 1.5 → tighten to 15% trail
+
+Return: +2,634% to +3,813%
+Trades: ~15 over 7 years  
+Best for: Paper trading, learning
+```
 
 ---
 
@@ -731,6 +1037,12 @@ data/
 | 2025-01-11 | Adaptive trail test | +1,886% | ✅ | Simple 8% trail beat adaptive variants |
 | 2025-01-11 | **STRAT-003 (STH + 8% trail)** | **+1,886%** | ✅✅ **SHORT-TERM** | 9 trades/yr, 29d avg hold, paper ready |
 | 2025-01-11 | Realized profit exit theory | +31% better | ✅✅ **INSIGHT** | SOPR > 1.05 marks tops like SOPR < 1 marks bottoms |
+| 2025-01-11 | **STRAT-002 v6 vs v5** | v5 wins | ✅ **CONFIRMED** | Simple 30% trail (+5,766%) beat realized exit (+3,712%) for long-term |
+| 2025-01-12 | **LTH-SOPR exit test** | **+3,813%** | ✅✅ **BREAKTHROUGH** | LTH-SOPR > 1.5 beat simple trail (+2,970%) by +28% for short-term! |
+| 2025-01-12 | LTH-SOPR for STRAT-002 | v5 wins | ✅ Confirmed | Simple 30% trail (+7,827%) still beats LTH exit (+4,974%) for long-term |
+| 2025-01-12 | **MVRV Z + LTH exit test** | +4,409% | ✅ **INSIGHT** | MVRV Z > raw MVRV (+528% better) for triggered exits |
+| 2025-01-12 | MVRV Z for STRAT-002 | v5 wins | ✅ Confirmed | Simple 30% trail (+6,122%) still beats all complex exits for long-term |
+| 2025-01-12 | **Realized Price stop test** | -2,511% | ❌ **REJECTED** | RP marks BOTTOMS not tops! Selling at worst time. |
 
 ---
 
@@ -749,7 +1061,10 @@ data/
 11. **Let winners run** - avoid arbitrary time exits when exit logic is sound
 12. **SIMPLER IS BETTER** - Simple 30% trail beat complex MVRV trail by 2x! 🏆
 13. **Realized metrics for entries, price action for exits** - SOPR works because it's realized (action); MVRV fails for exits because it's unrealized (state). Panic is action, greed is state. 🏆
-14. **Realized metrics work for BOTH entries AND exits** - SOPR < 1 marks bottoms, SOPR > 1.05 marks tops. Action beats state for timing! 🏆
+14. **Realized exits are TIMEFRAME DEPENDENT** - Works for short-term (tight trails, many trades), NOT for long-term (wide trails, few trades). Simple 30% trail beat realized exit by +2,000% for long-term! 🏆
+15. **LTH-SOPR is the best exit signal for short-term** - At tops: LTH-SOPR ~5.0 vs STH-SOPR ~1.03. Smart money distribution beats trader noise. +28% improvement over simple trail! 🏆
+16. **MVRV Z-Score > raw MVRV for triggered exits** - If using complex exits, MVRV Z > 2.5 beats MVRV > 2.5 by +528%. Z-score adapts to market structure changes. 🏆
+17. **Realized Price is ENTRY signal, not EXIT** - Price < RP marks BOTTOMS (best buying). Using RP as exit stop costs -2,511%. Don't sell at maximum fear! 🏆
 
 ---
 
@@ -815,4 +1130,4 @@ data/
 
 ---
 
-*Last updated: 2025-01-11*
+*Last updated: 2025-01-12*

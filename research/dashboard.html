@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 24px; }
+        .header h1 { font-size: 24px; font-weight: 700; color: #f8fafc; }
+        .header .sub { color: #64748b; font-size: 13px; margin-top: 4px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+        .card { background: #1e293b; border-radius: 12px; padding: 18px; border: 1px solid #334155; }
+        .card.wide { grid-column: span 2; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #334155; }
+        .card-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card-title.blue { color: #60a5fa; } .card-title.green { color: #4ade80; } .card-title.red { color: #f87171; }
+        .card-title.purple { color: #c084fc; } .card-title.orange { color: #fb923c; }
+        .big-value { font-size: 32px; font-weight: 700; color: #f8fafc; }
+        .price-change { font-size: 14px; margin-left: 10px; }
+        .price-change.up { color: #4ade80; }
+        .price-change.down { color: #f87171; }
+        .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #334155; }
+        .metric-row:last-child { border-bottom: none; }
+        .metric-label { color: #94a3b8; font-size: 13px; }
+        .metric-value { font-weight: 600; font-size: 14px; margin-right: 6px; }
+        .metric-value.green { color: #4ade80; } .metric-value.red { color: #f87171; }
+        .badge { display: inline-block; padding: 3px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; }
+        .badge-green { background: #14532d; color: #4ade80; } .badge-gray { background: #374151; color: #9ca3af; }
+        .signal-box { padding: 14px; border-radius: 8px; text-align: center; margin-bottom: 14px; }
+        .signal-box.active { background: linear-gradient(135deg, #14532d, #166534); border: 2px solid #22c55e; }
+        .signal-box.inactive { background: #1e293b; border: 2px solid #475569; }
+        .signal-box.warning { background: linear-gradient(135deg, #7f1d1d, #991b1b); border: 2px solid #ef4444; }
+        .signal-text { font-size: 16px; font-weight: 700; }
+        .price-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 12px; }
+        .price-bar { flex: 1; height: 6px; background: #334155; border-radius: 3px; overflow: hidden; }
+        .price-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .price-label { width: 100px; color: #94a3b8; }
+        .price-value { width: 80px; text-align: right; font-weight: 600; }
+        .zone-badge { display: inline-block; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+        .signal-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+        .zone-row { display: flex; align-items: center; padding: 6px 10px; border-radius: 5px; margin-bottom: 3px; font-size: 12px; }
+        .zone-row.active { border: 2px solid currentColor; }
+        .zone-emoji { width: 20px; } .zone-name { flex: 1; font-weight: 600; }
+        .zone-range { color: #94a3b8; font-size: 11px; margin-right: 10px; }
+        .zone-mult { font-weight: 700; width: 40px; text-align: right; }
+        .conf-item { display: flex; align-items: center; padding: 4px 0; font-size: 12px; }
+        .conf-dot { width: 6px; height: 6px; border-radius: 50%; margin-right: 8px; }
+        .conf-cat { color: #64748b; width: 50px; font-size: 10px; }
+        .sopr-bar { width: 100%; height: 20px; background: linear-gradient(90deg, #ef4444 0%, #6b7280 50%, #22c55e 100%); border-radius: 4px; position: relative; margin: 6px 0; }
+        .sopr-marker { position: absolute; top: -3px; width: 3px; height: 26px; background: #f8fafc; border-radius: 2px; transform: translateX(-50%); }
+        .sopr-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #f8fafc; opacity: 0.4; }
+        .footer { text-align: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid #334155; color: #64748b; font-size: 12px; }
+        .live-dot { display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; margin-right: 6px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .refresh-btn { position: fixed; bottom: 20px; right: 20px; background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        @media (max-width: 768px) { .card.wide { grid-column: span 1; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>₿ Bitcoin Trading Dashboard</h1>
+            <div class="sub">On-chain: 2026-01-14 (⚠️ 2d old) | <span class="live-dot"></span><span id="live-status">Connecting...</span></div>
+        </div>
+        
+        <div class="grid">
+            <!-- PRICE -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title blue">Price</span>
+                    <span>
+                        <span class="price-change" id="price-change"></span>
+                        <span class="signal-badge" id="price-signal" style="background: #fbbf2420; color: #fbbf24; margin-left: 8px;">HOLD</span>
+                    </span>
+                </div>
+                <div style="display: flex; align-items: baseline; margin-bottom: 16px;">
+                    <div class="big-value" id="live-price">$95,868</div>
+                </div>
+                <div id="price-levels">
+                            <div class="price-row" data-level="realized_price">
+                                <span class="price-label">Realized Price</span>
+                                <div class="price-bar"><div class="price-bar-fill" style="width: 59%; background: #22c55e;"></div></div>
+                                <span class="price-value">$56,232</span>
+                            </div>
+                            <div class="price-row" data-level="true_market_mean">
+                                <span class="price-label">True Market Mean</span>
+                                <div class="price-bar"><div class="price-bar-fill" style="width: 85%; background: #a855f7;"></div></div>
+                                <span class="price-value">$81,092</span>
+                            </div>
+                            <div class="price-row" data-level="sth_realized_price">
+                                <span class="price-label">STH Cost Basis</span>
+                                <div class="price-bar"><div class="price-bar-fill" style="width: 100%; background: #60a5fa;"></div></div>
+                                <span class="price-value">$98,344</span>
+                            </div>
+                            <div class="price-row" data-level="vaulted_price">
+                                <span class="price-label">Vaulted Price</span>
+                                <div class="price-bar"><div class="price-bar-fill" style="width: 100%; background: #f97316;"></div></div>
+                                <span class="price-value">$156,369</span>
+                            </div>
+                </div>
+            </div>
+            
+            <!-- VALUATION -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title purple">Valuation</span>
+                    <span>
+                        <span class="zone-badge" id="zone-badge" style="background: #22c55e20; color: #22c55e">FAIR VALUE</span>
+                        <span class="signal-badge" style="background: #fbbf2420; color: #fbbf24; margin-left: 8px;">HOLD</span>
+                    </span>
+                </div>
+                        <div class="zone-row " data-zone="EXTREME BEAR" style="background: #0f172a; color: #ef4444;">
+                            <span class="zone-emoji">🔴</span>
+                            <span class="zone-name">EXTREME BEAR</span>
+                            <span class="zone-range">< RP</span>
+                            <span class="zone-mult">2x</span>
+                        </div>
+                        <div class="zone-row " data-zone="UNDERVALUED" style="background: #0f172a; color: #f97316;">
+                            <span class="zone-emoji">🟠</span>
+                            <span class="zone-name">UNDERVALUED</span>
+                            <span class="zone-range">RP→TMM</span>
+                            <span class="zone-mult">1.5x</span>
+                        </div>
+                        <div class="zone-row active" data-zone="FAIR VALUE" style="background: #22c55e15; color: #22c55e;">
+                            <span class="zone-emoji">🟢</span>
+                            <span class="zone-name">FAIR VALUE</span>
+                            <span class="zone-range">TMM→STH</span>
+                            <span class="zone-mult">1x</span>
+                        </div>
+                        <div class="zone-row " data-zone="OVERVALUED" style="background: #0f172a; color: #fbbf24;">
+                            <span class="zone-emoji">🟡</span>
+                            <span class="zone-name">OVERVALUED</span>
+                            <span class="zone-range">> STH</span>
+                            <span class="zone-mult">0.5x</span>
+                        </div>
+                        <div class="zone-row " data-zone="EXTREME BULL" style="background: #0f172a; color: #a855f7;">
+                            <span class="zone-emoji">🟣</span>
+                            <span class="zone-name">EXTREME BULL</span>
+                            <span class="zone-range">> Vault</span>
+                            <span class="zone-mult">0.25x</span>
+                        </div>
+                <div style="margin-top: 12px; padding: 10px; background: #0f172a; border-radius: 6px; text-align: center;">
+                    <span style="color: #94a3b8; font-size: 11px;">Position Size:</span>
+                    <span style="font-size: 20px; font-weight: 700; margin-left: 8px;" id="position-mult">1.0x</span>
+                </div>
+            </div>
+            
+            <!-- ENTRY SIGNALS -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title green">Entry Signals</span>
+                    <span class="signal-badge" style="background: #6b728020; color: #6b7280;">NO BUY</span>
+                </div>
+                <div class="signal-box inactive">
+                    <div class="signal-text" style="color: #6b7280">⚪ No Entry</div>
+                </div>
+                
+                <div class="metric-row">
+                    <span class="metric-label">SOPR < 1</span>
+                    <span><span class="metric-value ">1.0201</span>
+                    <span class="badge badge-gray">○</span></span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">STH-SOPR < 1</span>
+                    <span><span class="metric-value ">1.0126</span>
+                    <span class="badge badge-gray">○</span></span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">RL Z > 0.5</span>
+                    <span><span class="metric-value ">-0.4069</span>
+                    <span class="badge badge-gray">○</span></span>
+                </div>
+            </div>
+            
+            <!-- EXIT SIGNALS -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title red">Exit Signals</span>
+                    <span class="signal-badge" style="background: #fbbf2420; color: #fbbf24;">CAUTION</span>
+                </div>
+                <div class="signal-box inactive">
+                    <div class="signal-text" style="color: #6b7280">⚪ No Exit</div>
+                </div>
+                
+                <div class="metric-row">
+                    <span class="metric-label">LTH-SOPR > 1.5</span>
+                    <span><span class="metric-value red">1.5111</span>
+                    <span class="badge badge-green">✓</span></span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">MVRV-Z > 2.5</span>
+                    <span><span class="metric-value ">1.4359</span>
+                    <span class="badge badge-gray">○</span></span>
+                </div>
+                <div style="margin-top: 10px; padding: 8px; background: #0f172a; border-radius: 6px; font-size: 11px;">
+                    <span style="color: #94a3b8;">Trailing:</span> <span style="color: #f8fafc;">STRAT-002: 30% | STRAT-004: 12%</span>
+                </div>
+            </div>
+            
+            <!-- CYCLE CONTEXT -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title purple">Cycle</span>
+                    <span>
+                        <span class="zone-badge" style="background: #3b82f620; color: #3b82f6">FAIR VALUE</span>
+                        <span class="signal-badge" style="background: #fbbf2420; color: #fbbf24; margin-left: 8px;">HOLD</span>
+                    </span>
+                </div>
+                <div class="metric-row"><span class="metric-label">MVRV-Z</span><span class="metric-value" style="color: #3b82f6">1.44</span></div>
+                <div class="metric-row"><span class="metric-label">MVRV</span><span class="metric-value">1.72</span></div>
+                <div class="metric-row"><span class="metric-label">AVIV</span><span class="metric-value">1.19</span></div>
+                <div class="metric-row"><span class="metric-label">NUPL</span><span class="metric-value">0.42</span></div>
+                
+                <!-- Cycle Zone Guide -->
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #334155;">
+                    <div style="font-size: 10px; color: #64748b; margin-bottom: 6px; text-transform: uppercase;">Interpretation Guide</div>
+                    <div class="zone-row" style="background: #0f172a;" data-cycle-zone="ACCUMULATION" style="color: #22c55e;">
+                        <span class="zone-emoji">🟢</span>
+                        <span class="zone-name">ACCUMULATION</span>
+                        <span class="zone-range">≤ 1</span>
+                        <span class="zone-mult">Buy</span>
+                    </div>
+                    <div class="zone-row" active" style="background: #3b82f615;" data-cycle-zone="FAIR VALUE" style="color: #3b82f6;">
+                        <span class="zone-emoji">🔵</span>
+                        <span class="zone-name">FAIR VALUE</span>
+                        <span class="zone-range">1-2</span>
+                        <span class="zone-mult">Hold</span>
+                    </div>
+                    <div class="zone-row" style="background: #0f172a;" data-cycle-zone="EXPENSIVE" style="color: #f97316;">
+                        <span class="zone-emoji">🟠</span>
+                        <span class="zone-name">EXPENSIVE</span>
+                        <span class="zone-range">2-3</span>
+                        <span class="zone-mult">Reduce</span>
+                    </div>
+                    <div class="zone-row" style="background: #0f172a;" data-cycle-zone="EUPHORIA" style="color: #ef4444;">
+                        <span class="zone-emoji">🔴</span>
+                        <span class="zone-name">EUPHORIA</span>
+                        <span class="zone-range">> 3</span>
+                        <span class="zone-mult">Exit</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- SOPR -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title orange">SOPR</span>
+                    <span class="signal-badge" style="background: #fbbf2420; color: #fbbf24;">CAUTION</span>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px;">
+                        <span style="color: #94a3b8;">SOPR</span>
+                        <span style="font-weight: 600; color: #4ade80">1.0201</span>
+                    </div>
+                    <div class="sopr-bar"><div class="sopr-center"></div><div class="sopr-marker" style="left: 31.44117857313843%"></div></div>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px;">
+                        <span style="color: #94a3b8;">STH-SOPR</span>
+                        <span style="font-weight: 600; color: #4ade80">1.0126</span>
+                    </div>
+                    <div class="sopr-bar"><div class="sopr-center"></div><div class="sopr-marker" style="left: 30.370137682569325%"></div></div>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px;">
+                        <span style="color: #94a3b8;">LTH-SOPR</span>
+                        <span style="font-weight: 600; color: #4ade80">1.5111</span>
+                    </div>
+                    <div class="sopr-bar"><div class="sopr-center"></div><div class="sopr-marker" style="left: 100%"></div></div>
+                </div>
+            </div>
+            
+            <!-- SUPPLY DYNAMICS -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title" style="color: #06b6d4;">Supply Dynamics</span>
+                    <span>
+                        <span class="zone-badge" style="background: #6b728020; color: #6b7280">NEUTRAL</span>
+                        <span class="signal-badge" style="background: #fbbf2420; color: #fbbf24; margin-left: 8px;">HOLD</span>
+                    </span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">LTH/STH Ratio</span>
+                    <span class="metric-value">2.39</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">30d Change</span>
+                    <span class="metric-value" style="color: #4ade80">+1.34%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">LTH Supply %</span>
+                    <span class="metric-value">70.5%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">STH Supply %</span>
+                    <span class="metric-value">29.5%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Supply in Profit</span>
+                    <span class="metric-value" style="color: #4ade80">77.6%</span>
+                </div>
+            </div>
+            
+            <!-- MOMENTUM / TREND -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title" style="color: #ec4899;">Momentum / Trend</span>
+                    <span>
+                        <span class="zone-badge" style="background: #f8717120; color: #f87171">DOWNTREND</span>
+                        <span class="signal-badge" style="background: #ef444420; color: #ef4444; margin-left: 8px;">SELL</span>
+                    </span>
+                </div>
+                <div style="margin-bottom: 10px; padding: 8px; background: #0f172a; border-radius: 6px; text-align: center;">
+                    <span style="font-size: 11px; color: #ef4444; font-weight: 600;">Death Cross</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">50 MA</span>
+                    <span class="metric-value">$89,806</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Price vs 50 MA</span>
+                    <span class="metric-value" style="color: #4ade80">+6.7%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">200 MA</span>
+                    <span class="metric-value">$106,079</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Price vs 200 MA</span>
+                    <span class="metric-value" style="color: #f87171">-9.6%</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">Entry: 3 | Exit: 2 | 4+ confluence = high confidence</div>
+    </div>
+    <button class="refresh-btn" onclick="location.reload()">↻</button>
+    
+    <script>
+        // Price levels from on-chain data
+        const priceLevels = {"realized_price": 56232.43128142145, "true_market_mean": 81092.19570692538, "sth_realized_price": 98343.54832172119, "vaulted_price": 156369.04689827608};
+        
+        // Format price
+        function formatPrice(price) {
+            return '$' + Math.round(price).toLocaleString();
+        }
+        
+        // Determine valuation zone based on price
+        function getZone(price) {
+            if (price < priceLevels.realized_price) return { zone: 'EXTREME BEAR', color: '#ef4444', mult: '2x' };
+            if (price < priceLevels.true_market_mean) return { zone: 'UNDERVALUED', color: '#f97316', mult: '1.5x' };
+            if (price < priceLevels.sth_realized_price) return { zone: 'FAIR VALUE', color: '#22c55e', mult: '1x' };
+            if (price < priceLevels.vaulted_price) return { zone: 'OVERVALUED', color: '#fbbf24', mult: '0.5x' };
+            return { zone: 'EXTREME BULL', color: '#a855f7', mult: '0.25x' };
+        }
+        
+        // Update price bars based on live price
+        function updatePriceBars(price) {
+            const bars = document.querySelectorAll('.price-row');
+            bars.forEach(row => {
+                const level = row.dataset.level;
+                const levelPrice = priceLevels[level];
+                if (levelPrice) {
+                    const pct = Math.min(100, (levelPrice / price) * 100);
+                    const fill = row.querySelector('.price-bar-fill');
+                    if (fill) fill.style.width = pct + '%';
+                }
+            });
+        }
+        
+        // Update zone highlighting
+        function updateZoneHighlight(zoneName) {
+            const zones = document.querySelectorAll('.zone-row');
+            zones.forEach(row => {
+                const isActive = row.dataset.zone === zoneName;
+                row.classList.toggle('active', isActive);
+                if (isActive) {
+                    row.style.background = row.style.color.replace(')', ', 0.15)').replace('rgb', 'rgba');
+                } else {
+                    row.style.background = '#0f172a';
+                }
+            });
+        }
+        
+        // Fetch price from Coinbase
+        async function fetchPrice() {
+            try {
+                const response = await fetch('https://api.coinbase.com/v2/prices/BTC-USD/spot');
+                const data = await response.json();
+                const price = parseFloat(data.data.amount);
+                
+                // Update price display
+                document.getElementById('live-price').textContent = formatPrice(price);
+                document.getElementById('live-status').textContent = 'Live from Coinbase';
+                
+                // Get 24h change
+                const tickerResponse = await fetch('https://api.exchange.coinbase.com/products/BTC-USD/ticker');
+                const ticker = await tickerResponse.json();
+                const open24h = parseFloat(ticker.open_24h);
+                const change = ((price - open24h) / open24h) * 100;
+                
+                const changeEl = document.getElementById('price-change');
+                changeEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
+                changeEl.className = 'price-change ' + (change >= 0 ? 'up' : 'down');
+                
+                // Update valuation zone
+                const zone = getZone(price);
+                const zoneBadge = document.getElementById('zone-badge');
+                zoneBadge.textContent = zone.zone;
+                zoneBadge.style.background = zone.color + '20';
+                zoneBadge.style.color = zone.color;
+                
+                const multEl = document.getElementById('position-mult');
+                multEl.textContent = zone.mult;
+                multEl.style.color = zone.color;
+                
+                // Update price bars and zone highlighting
+                updatePriceBars(price);
+                updateZoneHighlight(zone.zone);
+                
+            } catch (error) {
+                console.error('Price fetch error:', error);
+                document.getElementById('live-status').textContent = 'Update failed';
+            }
+        }
+        
+        // Initial fetch and then every 10 seconds
+        fetchPrice();
+        setInterval(fetchPrice, 10000);
+    </script>
+</body>
+</html>

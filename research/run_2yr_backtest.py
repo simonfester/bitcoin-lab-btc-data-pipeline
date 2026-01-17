@@ -6,7 +6,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Load data
-DATA_DIR = Path("data/raw")
+DATA_DIR = Path("data/daily")
 
 price = pd.read_parquet(DATA_DIR / "price.parquet").rename(columns={"value": "price"}).set_index("time")
 sopr = pd.read_parquet(DATA_DIR / "sopr.parquet").rename(columns={"value": "sopr"}).set_index("time")

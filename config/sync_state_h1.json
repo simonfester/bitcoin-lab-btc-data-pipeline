@@ -1,0 +1,40 @@
+{
+  "last_sync": "2026-01-16T12:16:10.057119+00:00",
+  "metrics": {
+    "price": {
+      "last_timestamp": "2026-01-15T17:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:06.025417+00:00",
+      "row_count": 96549,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/price/price?resolution=h1&output_format=json&from_time=2026-01-15T18%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A05Z"
+    },
+    "sopr": {
+      "last_timestamp": "2026-01-15T15:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:06.976290+00:00",
+      "row_count": 96547,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/spent_output_profit_ratio/sopr?resolution=h1&output_format=json&from_time=2026-01-15T16%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A06Z"
+    },
+    "sopr_lth": {
+      "last_timestamp": "2026-01-15T15:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:08.027951+00:00",
+      "row_count": 96547,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/spent_output_profit_ratio/sopr_lth?resolution=h1&output_format=json&from_time=2026-01-15T16%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A06Z"
+    },
+    "sopr_sth": {
+      "last_timestamp": "2026-01-15T15:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:09.075077+00:00",
+      "row_count": 96547,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/spent_output_profit_ratio/sopr_sth?resolution=h1&output_format=json&from_time=2026-01-15T16%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A08Z"
+    },
+    "realized_loss": {
+      "last_timestamp": "2026-01-15T15:00:00+00:00",
+      "last_sync": "2026-01-16T12:16:10.056714+00:00",
+      "row_count": 96547,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/realizedloss/realized_loss?resolution=h1&output_format=json&from_time=2026-01-15T16%3A00%3A00Z&to_time=2026-01-16T12%3A16%3A09Z"
+    }
+  }
+}

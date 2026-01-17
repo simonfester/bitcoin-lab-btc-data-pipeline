@@ -38,6 +38,7 @@ metrics:
     priority: critical
     tier: 0
     description: "BTC price in USD"
+    resolutions: [d1, h1, h4, h8, h12]  # API supports all
 
   - name: market_cap
     endpoint: marketcap
@@ -102,6 +103,7 @@ metrics:
     priority: high
     tier: 1
     description: "Spent Output Profit Ratio"
+    resolutions: [d1, h1, h4, h8, h12]  # API supports all
 
   - name: sopr_lth
     endpoint: spent_output_profit_ratio
@@ -109,6 +111,7 @@ metrics:
     priority: high
     tier: 2
     description: "SOPR for Long-Term Holders"
+    resolutions: [d1, h1, h4, h8, h12]  # API supports all
 
   - name: sopr_sth
     endpoint: spent_output_profit_ratio
@@ -116,6 +119,7 @@ metrics:
     priority: high
     tier: 2
     description: "SOPR for Short-Term Holders"
+    resolutions: [d1, h1, h4, h8, h12]  # API supports all
 
   - name: nupl
     endpoint: net_unrealized_profit_loss
@@ -298,6 +302,27 @@ metrics:
     description: "Cumulative USD value of all mined BTC"
 
   # ==========================================================================
+  # JAMES CHECK "WEN TOP?" FRAMEWORK METRICS (High - professional validation)
+  # ==========================================================================
+  # These metrics were identified from James Check's Masterclass #21 "Wen Top?"
+  # as key indicators for cycle top identification and market positioning.
+  # See: research/LESSONS_LEARNED.md for validation notes
+
+  - name: vaulted_price
+    endpoint: cointime_statistics
+    data_field: vaulted_realized_price
+    priority: high
+    tier: 2
+    description: "Vaulted Realized Price - lower bound of Check's 'topping cloud' where HODLers ramp up profit taking"
+
+  - name: aviv
+    endpoint: cointime_statistics
+    data_field: active_value_to_investor_value
+    priority: high
+    tier: 2
+    description: "AVIV Ratio (Active Value to Investor Value) - Check's preferred MVRV variant for macro cycle analysis"
+
+  # ==========================================================================
   # DORMANCY & COIN DAYS (Medium - old coin movement)
   # ==========================================================================
 
@@ -445,4 +470,5 @@ metrics:
     data_field: realized_loss
     priority: medium
     tier: 1
-    description: "Daily realized loss"
+    description: "Realized loss (USD)"
+    resolutions: [d1, h1, h4, h8, h12]  # API supports all

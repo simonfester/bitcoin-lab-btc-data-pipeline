@@ -1,0 +1,40 @@
+{
+  "last_sync": "2026-01-16T12:16:14.247191+00:00",
+  "metrics": {
+    "price": {
+      "last_timestamp": null,
+      "last_sync": "2026-01-16T12:16:10.226155+00:00",
+      "row_count": 0,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/price/price?resolution=h4&output_format=json&from_time=2015-01-01T00%3A00%3A00Z&to_time=2023-10-06T00%3A00%3A00Z"
+    },
+    "sopr": {
+      "last_timestamp": null,
+      "last_sync": "2026-01-16T12:16:11.167963+00:00",
+      "row_count": 0,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/spent_output_profit_ratio/sopr?resolution=h4&output_format=json&from_time=2015-01-01T00%3A00%3A00Z&to_time=2023-10-06T00%3A00%3A00Z"
+    },
+    "sopr_lth": {
+      "last_timestamp": null,
+      "last_sync": "2026-01-16T12:16:12.214813+00:00",
+      "row_count": 0,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/spent_output_profit_ratio/sopr_lth?resolution=h4&output_format=json&from_time=2015-01-01T00%3A00%3A00Z&to_time=2023-10-06T00%3A00%3A00Z"
+    },
+    "sopr_sth": {
+      "last_timestamp": null,
+      "last_sync": "2026-01-16T12:16:13.207700+00:00",
+      "row_count": 0,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/spent_output_profit_ratio/sopr_sth?resolution=h4&output_format=json&from_time=2015-01-01T00%3A00%3A00Z&to_time=2023-10-06T00%3A00%3A00Z"
+    },
+    "realized_loss": {
+      "last_timestamp": null,
+      "last_sync": "2026-01-16T12:16:14.247133+00:00",
+      "row_count": 0,
+      "status": "error",
+      "error": "400 Client Error: Bad Request for url: https://api.researchbitcoin.net/v2/realizedloss/realized_loss?resolution=h4&output_format=json&from_time=2015-01-01T00%3A00%3A00Z&to_time=2023-10-06T00%3A00%3A00Z"
+    }
+  }
+}

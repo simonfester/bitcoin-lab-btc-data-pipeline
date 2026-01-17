@@ -4,16 +4,21 @@ Bitcoin Lab API Data Pipeline
 Downloads, stores, and updates Bitcoin on-chain metrics for backtesting and ML.
 
 Usage:
-    python -m src.downloader sync          # Incremental sync (daily use)
-    python -m src.downloader backfill      # Full historical backfill
-    python -m src.downloader status        # Show sync status
-    python -m src.downloader info          # Show API quota info
+    python -m src.downloader sync                    # Daily incremental sync
+    python -m src.downloader sync --resolution h1   # Hourly sync
+    python -m src.downloader backfill               # Full daily backfill
+    python -m src.downloader backfill --resolution h1 2024-01-01  # Hourly backfill
+    python -m src.downloader status                 # Show daily sync status
+    python -m src.downloader status --resolution h1 # Show hourly sync status
+    python -m src.downloader info                   # Show API quota info
 """
 
 import os
 import json
 import time
 import logging
+import argparse
+from io import StringIO
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -32,11 +37,20 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent
 CONFIG_DIR = PROJECT_ROOT / "config"
 DATA_DIR = PROJECT_ROOT / "data"
-RAW_DIR = DATA_DIR / "raw"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
+# Resolution-specific directories
+RESOLUTION_DIRS = {
+    "d1": DATA_DIR / "daily",
+    "h1": DATA_DIR / "hourly",
+    "h4": DATA_DIR / "h4",
+    "h8": DATA_DIR / "h8",
+    "h12": DATA_DIR / "h12",
+    "block": DATA_DIR / "block",
+}
+
 # Ensure directories exist
-for d in [RAW_DIR, LOGS_DIR]:
+for d in list(RESOLUTION_DIRS.values()) + [LOGS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # Logging setup
@@ -64,10 +78,14 @@ class MetricConfig:
     priority: str = "medium"
     tier: int = 0
     description: str = ""
+    resolutions: list = field(default_factory=lambda: ["d1"])  # Available resolutions
     
     @property
     def priority_order(self) -> int:
         return {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(self.priority, 2)
+    
+    def supports_resolution(self, resolution: str) -> bool:
+        return resolution in self.resolutions
 
 
 @dataclass 
@@ -163,19 +181,79 @@ class BitcoinLabAPI:
         resolution: str = "d1"
     ) -> pd.DataFrame:
         """
-        Fetch metric data from API.
+        Fetch metric data from API with automatic pagination for large date ranges.
         
         Returns DataFrame with columns: [time, value]
         """
+        # Calculate chunk size based on resolution (API limit: 20,000 points)
+        # Use conservative chunks to stay under limit
+        chunk_days = {
+            "h1": 800,    # ~19,200 points
+            "h4": 3200,   # ~19,200 points  
+            "h8": 6400,   # ~19,200 points
+            "h12": 9600,  # ~19,200 points
+            "d1": 19000,  # ~19,000 points (no chunking needed for practical ranges)
+            "block": 100, # Conservative for block data
+        }.get(resolution, 800)
+        
+        # Parse dates
+        start_dt = pd.to_datetime(from_time) if from_time else pd.Timestamp("2015-01-01")
+        end_dt = pd.to_datetime(to_time) if to_time else pd.Timestamp.now(tz="UTC")
+        
+        # Make timezone-aware if needed
+        if start_dt.tz is None:
+            start_dt = start_dt.tz_localize("UTC")
+        if end_dt.tz is None:
+            end_dt = end_dt.tz_localize("UTC")
+        
+        all_dfs = []
+        current_start = start_dt
+        
+        while current_start < end_dt:
+            current_end = min(current_start + timedelta(days=chunk_days), end_dt)
+            
+            df_chunk = self._fetch_chunk(
+                endpoint=endpoint,
+                data_field=data_field,
+                from_time=current_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                to_time=current_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                resolution=resolution
+            )
+            
+            if not df_chunk.empty:
+                all_dfs.append(df_chunk)
+                logger.debug(f"  Chunk {current_start.date()} to {current_end.date()}: {len(df_chunk)} rows")
+            
+            current_start = current_end
+        
+        if not all_dfs:
+            return pd.DataFrame(columns=["time", "value"])
+        
+        # Combine all chunks
+        df = pd.concat(all_dfs, ignore_index=True)
+        df = df.drop_duplicates(subset=["time"], keep="last")
+        df = df.sort_values("time").reset_index(drop=True)
+        
+        return df
+    
+    def _fetch_chunk(
+        self,
+        endpoint: str,
+        data_field: str,
+        from_time: str,
+        to_time: str,
+        resolution: str
+    ) -> pd.DataFrame:
+        """Fetch a single chunk of data from the API."""
         self._rate_limit_wait()
         
         url = f"{self.base_url}/v2/{endpoint}/{data_field}"
-        params = {"resolution": resolution, "output_format": "json"}
-        
-        if from_time:
-            params["from_time"] = from_time
-        if to_time:
-            params["to_time"] = to_time
+        params = {
+            "resolution": resolution,
+            "output_format": "json",
+            "from_time": from_time,
+            "to_time": to_time
+        }
         
         logger.debug(f"Fetching {url} with params {params}")
         
@@ -185,7 +263,7 @@ class BitcoinLabAPI:
         data = resp.json()
         
         if data.get("status") != "success":
-            raise ValueError(f"API error: {data.get('error', 'Unknown error')}")
+            raise ValueError(f"API error: {data.get('error', data.get('message', 'Unknown error'))}")
         
         # Parse response data
         raw_data = data.get("data", [])
@@ -200,8 +278,6 @@ class BitcoinLabAPI:
         df = pd.DataFrame(raw_data)
         
         # Standardize column names
-        # API returns the data_field name as column (e.g., 'price', 'mvrv')
-        # Rename it to 'value' for consistency
         if "time" not in df.columns and "t" in df.columns:
             df = df.rename(columns={"t": "time"})
         
@@ -308,16 +384,43 @@ class SyncEngine:
         api: BitcoinLabAPI,
         storage: ParquetStorage,
         metrics: list[MetricConfig],
-        state_path: Path
+        state_path: Path,
+        resolution: str = "d1"
     ):
         self.api = api
         self.storage = storage
-        self.metrics = sorted(metrics, key=lambda m: m.priority_order)
+        self.resolution = resolution
+        # Filter metrics to only those supporting this resolution
+        self.metrics = sorted(
+            [m for m in metrics if m.supports_resolution(resolution)],
+            key=lambda m: m.priority_order
+        )
         self.state_path = state_path
         self.state = SyncState.load(state_path)
     
     def _save_state(self):
         self.state.save(self.state_path)
+    
+    def _get_incremental_start(self, metric: MetricConfig) -> str:
+        """Determine start time for incremental sync based on resolution."""
+        last_ts = self.storage.get_last_timestamp(metric.name)
+        if last_ts:
+            # Increment based on resolution
+            if self.resolution == "d1":
+                return (last_ts + timedelta(days=1)).strftime("%Y-%m-%d")
+            elif self.resolution == "h1":
+                return (last_ts + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+            elif self.resolution == "h4":
+                return (last_ts + timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
+            elif self.resolution == "h8":
+                return (last_ts + timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%S")
+            elif self.resolution == "h12":
+                return (last_ts + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S")
+            else:
+                return (last_ts + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+        else:
+            # No existing data - use default start
+            return "2015-01-01"
     
     def sync_metric(
         self,
@@ -334,23 +437,17 @@ class SyncEngine:
         
         # Determine start time for incremental sync
         if from_time is None:
-            last_ts = self.storage.get_last_timestamp(metric.name)
-            if last_ts:
-                # Start from day after last data point
-                from_time = (last_ts + timedelta(days=1)).strftime("%Y-%m-%d")
-            else:
-                # No existing data - use default start
-                from_time = "2015-01-01"
+            from_time = self._get_incremental_start(metric)
         
         try:
-            logger.info(f"Syncing {metric.name} from {from_time}...")
+            logger.info(f"Syncing {metric.name} ({self.resolution}) from {from_time}...")
             
             df = self.api.fetch_metric(
                 endpoint=metric.endpoint,
                 data_field=metric.data_field,
                 from_time=from_time,
                 to_time=to_time,
-                resolution="d1"
+                resolution=self.resolution
             )
             
             if df.empty:
@@ -397,11 +494,17 @@ class SyncEngine:
         Returns summary dict.
         """
         logger.info("=" * 60)
-        logger.info("Starting sync...")
+        logger.info(f"Starting {self.resolution} sync...")
+        logger.info(f"Metrics supporting {self.resolution}: {len(self.metrics)}")
         logger.info("=" * 60)
+        
+        if not self.metrics:
+            logger.warning(f"No metrics configured for resolution {self.resolution}")
+            return {"metrics_total": 0, "metrics_success": 0, "rows_added": 0}
         
         results = {
             "started": datetime.now(timezone.utc).isoformat(),
+            "resolution": self.resolution,
             "metrics_total": len(self.metrics),
             "metrics_success": 0,
             "metrics_failed": 0,
@@ -446,12 +549,13 @@ class SyncEngine:
     
     def backfill(self, start_date: str = "2015-01-01") -> dict:
         """Run full historical backfill."""
-        logger.info(f"Running backfill from {start_date}...")
+        logger.info(f"Running {self.resolution} backfill from {start_date}...")
         return self.sync_all(from_time=start_date)
     
     def get_status(self) -> dict:
         """Get current sync status."""
         status = {
+            "resolution": self.resolution,
             "last_sync": self.state.last_sync,
             "metrics": {}
         }
@@ -480,19 +584,21 @@ def load_config() -> tuple[dict, list[MetricConfig]]:
     with open(config_path) as f:
         config = yaml.safe_load(f)
     
-    metrics = [
-        MetricConfig(**m)
-        for m in config.get("metrics", [])
-    ]
+    metrics = []
+    for m in config.get("metrics", []):
+        # Handle resolutions field - default to ["d1"] if not specified
+        if "resolutions" not in m:
+            m["resolutions"] = ["d1"]
+        metrics.append(MetricConfig(**m))
     
     return config, metrics
 
 
-def create_engine() -> SyncEngine:
-    """Create and configure the sync engine."""
+def create_engine(resolution: str = "d1") -> SyncEngine:
+    """Create and configure the sync engine for a specific resolution."""
     config, metrics = load_config()
     
-    # Get API token from environment or use default
+    # Get API token from environment
     token = os.environ.get(
         config["api"]["token_env"],
         os.environ.get("BITCOIN_LAB_TOKEN", "")
@@ -509,36 +615,41 @@ def create_engine() -> SyncEngine:
         rate_limit=config["api"].get("rate_limit_per_minute", 60)
     )
     
-    storage = ParquetStorage(RAW_DIR)
-    state_path = CONFIG_DIR / "sync_state.json"
+    # Use resolution-specific storage directory
+    storage_dir = RESOLUTION_DIRS.get(resolution, DATA_DIR / resolution)
+    storage = ParquetStorage(storage_dir)
     
-    return SyncEngine(api, storage, metrics, state_path)
+    # Use resolution-specific state file
+    state_path = CONFIG_DIR / f"sync_state_{resolution}.json"
+    
+    return SyncEngine(api, storage, metrics, state_path, resolution)
 
 
-def cmd_sync():
+def cmd_sync(resolution: str = "d1"):
     """Run incremental sync."""
-    engine = create_engine()
+    engine = create_engine(resolution)
     return engine.sync_all()
 
 
-def cmd_backfill(start_date: str = "2015-01-01"):
+def cmd_backfill(resolution: str = "d1", start_date: str = "2015-01-01"):
     """Run full backfill."""
-    engine = create_engine()
+    engine = create_engine(resolution)
     return engine.backfill(start_date)
 
 
-def cmd_status():
+def cmd_status(resolution: str = "d1"):
     """Show sync status."""
-    engine = create_engine()
+    engine = create_engine(resolution)
     status = engine.get_status()
     
-    print(f"\nLast sync: {status['last_sync'] or 'Never'}\n")
-    print(f"{'Metric':<30} {'Priority':<10} {'Status':<8} {'Rows':>8} {'Last Data':<12}")
-    print("-" * 80)
+    print(f"\nResolution: {status['resolution']}")
+    print(f"Last sync: {status['last_sync'] or 'Never'}\n")
+    print(f"{'Metric':<30} {'Priority':<10} {'Status':<8} {'Rows':>10} {'Last Data':<20}")
+    print("-" * 90)
     
     for name, info in status["metrics"].items():
-        last_ts = info["last_timestamp"][:10] if info["last_timestamp"] else "N/A"
-        print(f"{name:<30} {info['priority']:<10} {info['status']:<8} {info['row_count']:>8} {last_ts:<12}")
+        last_ts = info["last_timestamp"][:19] if info["last_timestamp"] else "N/A"
+        print(f"{name:<30} {info['priority']:<10} {info['status']:<8} {info['row_count']:>10} {last_ts:<20}")
     
     return status
 
@@ -567,25 +678,51 @@ def cmd_info():
 # CLI
 # =============================================================================
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="Bitcoin Lab API Data Pipeline",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s sync                         Daily incremental sync
+  %(prog)s sync --resolution h1         Hourly sync
+  %(prog)s backfill                     Full daily backfill from 2015
+  %(prog)s backfill --resolution h1 2024-01-01   Hourly backfill from 2024
+  %(prog)s status                       Show daily sync status
+  %(prog)s status --resolution h1       Show hourly sync status
+  %(prog)s info                         Show API quota info
+        """
+    )
+    
+    parser.add_argument(
+        "command",
+        choices=["sync", "backfill", "status", "info"],
+        help="Command to run"
+    )
+    parser.add_argument(
+        "--resolution", "-r",
+        choices=["d1", "h1", "h4", "h8", "h12", "block"],
+        default="d1",
+        help="Data resolution (default: d1)"
+    )
+    parser.add_argument(
+        "start_date",
+        nargs="?",
+        default="2015-01-01",
+        help="Start date for backfill (default: 2015-01-01)"
+    )
+    
+    args = parser.parse_args()
+    
+    if args.command == "sync":
+        cmd_sync(args.resolution)
+    elif args.command == "backfill":
+        cmd_backfill(args.resolution, args.start_date)
+    elif args.command == "status":
+        cmd_status(args.resolution)
+    elif args.command == "info":
+        cmd_info()
+
+
 if __name__ == "__main__":
-    import sys
-    
-    commands = {
-        "sync": cmd_sync,
-        "backfill": cmd_backfill,
-        "status": cmd_status,
-        "info": cmd_info,
-    }
-    
-    if len(sys.argv) < 2 or sys.argv[1] not in commands:
-        print(__doc__)
-        print(f"Available commands: {', '.join(commands.keys())}")
-        sys.exit(1)
-    
-    cmd = sys.argv[1]
-    
-    # Handle backfill with optional start date
-    if cmd == "backfill" and len(sys.argv) > 2:
-        commands[cmd](sys.argv[2])
-    else:
-        commands[cmd]()
+    main()
