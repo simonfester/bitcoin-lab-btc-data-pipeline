@@ -41,12 +41,13 @@ data/features/*
 data/combined_metrics.*
 
 # Results (can be regenerated)
-data/results/screens/*.json
-data/results/backtests/*.json
-data/results/walk_forward/*.json
+data/results/
+data/signals/
 
-# Signals (keep these - they're the output)
-# data/signals/*.json
+# Downloaded data from APIs
+data/bl/
+data/brk/
+data/glassnode/
 
 # Keep directory structure with .gitkeep
 !**/.gitkeep
@@ -57,6 +58,11 @@ data/results/walk_forward/*.json
 logs/*.log
 logs/**/*.log
 config/sync_state.json
+config/brk_sync_state.json
+config/bl/
+
+# Temporary outputs
+output.png
 
 # =============================================================================
 # JUPYTER
@@ -100,6 +106,13 @@ Thumbs.db
 *credential*
 *.pem
 *.key
+*.crt
+certs/
+
+# =============================================================================
+# GENERATED FILES
+# =============================================================================
+dashboard.html
 
 # =============================================================================
 # MISC

@@ -321,8 +321,9 @@ class Backtester:
         # Run simulation
         trades, equity = self._simulate(df, signal, price_col)
         
-        # Build equity curve
-        equity_curve = pd.Series(equity, index=df.index[:len(equity)], name='equity')
+        # Build equity curve (equity[1:] because equity starts with initial value 1.0)
+        # After processing all rows, equity has len(df)+1 elements
+        equity_curve = pd.Series(equity[1:], index=df.index, name='equity')
         
         # Calculate metrics
         return self._calculate_metrics(signal, trades, equity_curve)

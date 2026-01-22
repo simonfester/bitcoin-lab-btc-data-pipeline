@@ -1,0 +1,159 @@
+# Signal Definitions - Single Source of Truth
+# ============================================
+# DO NOT USE GLASSNODE - Use Bitcoin Lab + BRK only
+
+# Validated Strategies
+strategies:
+  STRAT-002:
+    name: "Long-Term Capitulation"
+    status: "VALIDATED"
+    frequency: "1-2 trades/year"
+    avg_hold: "300-500 days"
+    return: "+5,754%"
+    sharpe: 1.45
+    entry:
+      conditions:
+        - metric: sopr
+          operator: "<"
+          threshold: 1.0
+        - metric: sopr_sth
+          operator: "<"
+          threshold: 1.0
+        - metric: realized_loss_z
+          operator: ">"
+          threshold: 0.5
+      logic: "AND"
+      first_day_only: true
+    exit:
+      trailing_stop: 0.30  # 30%
+
+  STRAT-003:
+    name: "Short-Term Active"
+    status: "VALIDATED"
+    frequency: "9-15 trades/year"
+    avg_hold: "29 days"
+    return: "+5,973%"
+    sharpe: 1.22
+    entry:
+      conditions:
+        - metric: sopr_sth
+          operator: "<"
+          threshold: 1.0
+      logic: "AND"
+      first_day_only: true
+    exit:
+      # Before trigger: 30% trail
+      # After MVRV > 2.5 AND LTH-SOPR > 1.5: tighten to 15%
+      initial_trail: 0.30
+      trigger:
+        conditions:
+          - metric: mvrv
+            operator: ">"
+            threshold: 2.5
+          - metric: sopr_lth
+            operator: ">"
+            threshold: 1.5
+        logic: "AND"
+      triggered_trail: 0.15
+    position_sizing:
+      # Based on Checkmate composite signal
+      signal_metric: checkmate_composite
+      tiers:
+        - max_signal: -1.0
+          size: 1.0    # 100% - very bullish
+        - max_signal: -0.5
+          size: 0.8    # 80%
+        - max_signal: 0.0
+          size: 0.6    # 60%
+        - max_signal: 0.5
+          size: 0.4    # 40%
+        - max_signal: 999
+          size: 0.25   # 25% - bearish minimum
+
+# Checkmate Framework (Position Sizing Signal)
+checkmate:
+  name: "Checkmate Composite"
+  # Score: -2 (extreme bullish) to +2 (extreme bearish)
+  metrics:
+    mvrv:
+      weight: 0.30
+      bullish: 1.0
+      bearish: 2.4
+    mvrv_sth:
+      weight: 0.15
+      bullish: 1.0
+      bearish: 1.4
+    mvrv_lth:
+      weight: 0.15
+      bullish: 1.5
+      bearish: 3.5
+    nupl:
+      weight: 0.20
+      bullish: 0.25
+      bearish: 0.6
+    sopr:
+      weight: 0.10
+      bullish: 1.0
+      bearish: 1.05
+    aviv:
+      weight: 0.10
+      bullish: 1.0
+      bearish: 1.5
+
+# Data Sources (redundancy)
+# BRK is FREE, Bitcoin Lab costs quota
+data_sources:
+  primary: "brk"        # FREE - use first
+  secondary: "bitcoin_lab"  # Paid - fallback for fresh data
+  # DO NOT USE: glassnode
+
+# Metrics to sync
+metrics:
+  # Core entry/exit
+  - sopr
+  - sopr_sth
+  - sopr_lth
+  - sopr_adjusted
+  # Valuation
+  - mvrv
+  - mvrv_sth
+  - mvrv_lth
+  - mvrv_z
+  - nupl
+  - nupl_sth
+  - nupl_lth
+  - aviv
+  # Supply
+  - supply_in_profit
+  - supply_in_loss
+  - supply_lth
+  - supply_sth
+  # Realized
+  - realized_profit
+  - realized_loss
+  - realized_price
+  - realized_price_sth
+  - realized_price_lth
+  # Price
+  - price
+
+# Statistical Tests (before backtesting)
+exploratory_tests:
+  regression:
+    forward_days: 30
+    min_p_value: 0.05
+  grid_search:
+    n_points: 20
+    smoothness_threshold: 0.5
+  cycle_validation:
+    min_cycles_significant: 40  # percent
+    min_sign_consistency: 60    # percent
+  granger_causality:
+    max_lag: 5
+    significance: 0.05
+
+# Walk-forward config
+walk_forward:
+  train_pct: 0.70
+  test_pct: 0.30
+  min_beat_rate: 0.55  # Must beat buy-hold 55%+ of time

@@ -3,25 +3,37 @@
 Run script for Bitcoin Lab data pipeline.
 
 Usage:
-    ./run.py sync                # Sync all resolutions
-    ./run.py sync-daily          # Daily incremental sync
-    ./run.py sync-hourly         # Hourly incremental sync
-    ./run.py sync-h4             # 4-hourly incremental sync
-    ./run.py sync-h8             # 8-hourly incremental sync
-    ./run.py sync-h12            # 12-hourly incremental sync
-    ./run.py backfill-daily      # Full daily backfill
-    ./run.py backfill-hourly     # Hourly backfill from 2015-01-01
-    ./run.py backfill-h4         # 4-hourly backfill
-    ./run.py backfill-h8         # 8-hourly backfill
-    ./run.py backfill-h12        # 12-hourly backfill
-    ./run.py backfill-all        # Backfill ALL resolutions
-    ./run.py status              # Show all sync status
-    ./run.py info                # Check API quota (raw)
+    === BITCOIN LAB COMMANDS (paid, hourly+daily) ===
+    ./run.py bl-sync              # Sync all resolutions
+    ./run.py bl-sync-daily        # Daily incremental sync
+    ./run.py bl-sync-hourly       # Hourly incremental sync
+    ./run.py bl-sync-h4           # 4-hourly incremental sync
+    ./run.py bl-sync-h8           # 8-hourly incremental sync
+    ./run.py bl-sync-h12          # 12-hourly incremental sync
+    ./run.py bl-backfill-daily    # Full daily backfill
+    ./run.py bl-backfill-hourly   # Hourly backfill from 2015-01-01
+    ./run.py bl-backfill-h4       # 4-hourly backfill
+    ./run.py bl-backfill-h8       # 8-hourly backfill
+    ./run.py bl-backfill-h12      # 12-hourly backfill
+    ./run.py bl-backfill-all      # Backfill ALL resolutions
+    ./run.py bl-status            # Show all sync status
+    ./run.py bl-info              # Check API quota (raw)
+    
+    === BRK COMMANDS (FREE, daily only) ===
+    ./run.py brk-sync             # BRK incremental sync
+    ./run.py brk-backfill         # BRK full backfill
+    ./run.py brk-status           # Show BRK sync status
     
     === QUOTA COMMANDS ===
-    ./run.py quota               # Show quota status with visual
-    ./run.py quota-estimate N    # Estimate cost for N days sync
-    ./run.py quota-history       # Show usage history
+    ./run.py quota                # Show quota status with visual
+    ./run.py quota-estimate N     # Estimate cost for N days sync
+    ./run.py quota-history        # Show usage history
+    
+    === DATA LOADER COMMANDS ===
+    ./run.py data                 # Show cache status
+    ./run.py data-refresh         # Refresh cache from BRK (free)
+    ./run.py data-load METRICS    # Load metrics (comma-separated)
+    ./run.py signals              # Check current strategy signals
 """
 
 import sys
@@ -37,33 +49,44 @@ RESOLUTIONS = ["d1", "h1", "h4", "h8", "h12"]
 def print_usage():
     print(__doc__)
     print("Available commands:")
-    print("  sync             Sync all resolutions")
-    print("  sync-daily       Sync daily (d1) metrics")
-    print("  sync-hourly      Sync hourly (h1) metrics")
-    print("  sync-h4          Sync 4-hourly (h4) metrics")
-    print("  sync-h8          Sync 8-hourly (h8) metrics")
-    print("  sync-h12         Sync 12-hourly (h12) metrics")
     print("")
-    print("  backfill-daily   Full daily backfill from 2015-01-01")
-    print("  backfill-hourly  Hourly backfill from 2015-01-01")
-    print("  backfill-h4      4-hourly backfill from 2015-01-01")
-    print("  backfill-h8      8-hourly backfill from 2015-01-01")
-    print("  backfill-h12     12-hourly backfill from 2015-01-01")
-    print("  backfill-all     Backfill ALL resolutions (warning: high API usage)")
+    print("  === BITCOIN LAB (paid, hourly+daily) ===")
+    print("  bl-sync           Sync all resolutions")
+    print("  bl-sync-daily     Sync daily (d1) metrics")
+    print("  bl-sync-hourly    Sync hourly (h1) metrics")
+    print("  bl-sync-h4        Sync 4-hourly (h4) metrics")
+    print("  bl-sync-h8        Sync 8-hourly (h8) metrics")
+    print("  bl-sync-h12       Sync 12-hourly (h12) metrics")
     print("")
-    print("  status           Show sync status for all resolutions")
-    print("  status-daily     Show daily sync status")
-    print("  status-hourly    Show hourly sync status")
-    print("  status-h4        Show 4-hourly sync status")
-    print("  status-h8        Show 8-hourly sync status")
-    print("  status-h12       Show 12-hourly sync status")
+    print("  bl-backfill-daily   Full daily backfill from 2015-01-01")
+    print("  bl-backfill-hourly  Hourly backfill from 2015-01-01")
+    print("  bl-backfill-h4      4-hourly backfill from 2015-01-01")
+    print("  bl-backfill-h8      8-hourly backfill from 2015-01-01")
+    print("  bl-backfill-h12     12-hourly backfill from 2015-01-01")
+    print("  bl-backfill-all     Backfill ALL resolutions (warning: high API usage)")
     print("")
-    print("  info             Show raw API info")
+    print("  bl-status         Show sync status for all resolutions")
+    print("  bl-status-daily   Show daily sync status")
+    print("  bl-status-hourly  Show hourly sync status")
+    print("  bl-info           Show raw API info")
+    print("")
+    print("  === BRK (FREE, daily only) ===")
+    print("  brk-sync          Incremental sync (only new data)")
+    print("  brk-backfill      Full historical download")
+    print("  brk-status        Show sync status")
+    print("  brk-discover      List available metrics")
+    print("  brk-discover X    Search for metrics matching 'X'")
     print("")
     print("  === QUOTA COMMANDS ===")
-    print("  quota            Show quota status with visual progress bar")
-    print("  quota-estimate   Estimate quota cost (usage: quota-estimate DAYS [RESOLUTION])")
-    print("  quota-history    Show usage history for last 30 days")
+    print("  quota             Show quota status with visual progress bar")
+    print("  quota-estimate    Estimate quota cost (usage: quota-estimate DAYS [RESOLUTION])")
+    print("  quota-history     Show usage history for last 30 days")
+    print("")
+    print("  === DATA LOADER COMMANDS ===")
+    print("  data              Show cache freshness status")
+    print("  data-refresh      Refresh ALL metrics from BRK API (FREE)")
+    print("  data-load         Load metrics: data-load price,sopr,mvrv")
+    print("  signals           Check current STRAT-003 and Checkmate signals")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -73,44 +96,44 @@ if __name__ == "__main__":
     cmd = sys.argv[1]
     start_date = sys.argv[2] if len(sys.argv) > 2 else "2015-01-01"
     
-    # === SYNC COMMANDS ===
-    if cmd == "sync":
+    # === BL (BITCOIN LAB) SYNC COMMANDS ===
+    if cmd == "bl-sync":
         for res in RESOLUTIONS:
             print(f"\n=== Syncing {res.upper()} ===")
             cmd_sync(res)
     
-    elif cmd == "sync-daily":
+    elif cmd == "bl-sync-daily":
         cmd_sync("d1")
     
-    elif cmd == "sync-hourly":
+    elif cmd == "bl-sync-hourly":
         cmd_sync("h1")
     
-    elif cmd == "sync-h4":
+    elif cmd == "bl-sync-h4":
         cmd_sync("h4")
     
-    elif cmd == "sync-h8":
+    elif cmd == "bl-sync-h8":
         cmd_sync("h8")
     
-    elif cmd == "sync-h12":
+    elif cmd == "bl-sync-h12":
         cmd_sync("h12")
     
-    # === BACKFILL COMMANDS ===
-    elif cmd == "backfill-daily":
+    # === BL BACKFILL COMMANDS ===
+    elif cmd == "bl-backfill-daily":
         cmd_backfill("d1", start_date)
     
-    elif cmd == "backfill-hourly":
+    elif cmd == "bl-backfill-hourly":
         cmd_backfill("h1", start_date)
     
-    elif cmd == "backfill-h4":
+    elif cmd == "bl-backfill-h4":
         cmd_backfill("h4", start_date)
     
-    elif cmd == "backfill-h8":
+    elif cmd == "bl-backfill-h8":
         cmd_backfill("h8", start_date)
     
-    elif cmd == "backfill-h12":
+    elif cmd == "bl-backfill-h12":
         cmd_backfill("h12", start_date)
     
-    elif cmd == "backfill-all":
+    elif cmd == "bl-backfill-all":
         print("="*60)
         print("BACKFILLING ALL RESOLUTIONS")
         print("Warning: This will use significant API quota!")
@@ -121,29 +144,29 @@ if __name__ == "__main__":
             print(f"{'='*60}")
             cmd_backfill(res, start_date)
     
-    # === STATUS COMMANDS ===
-    elif cmd == "status":
+    # === BL STATUS COMMANDS ===
+    elif cmd == "bl-status":
         for res in RESOLUTIONS:
             print(f"\n=== {res.upper()} Status ===")
             cmd_status(res)
     
-    elif cmd == "status-daily":
+    elif cmd == "bl-status-daily":
         cmd_status("d1")
     
-    elif cmd == "status-hourly":
+    elif cmd == "bl-status-hourly":
         cmd_status("h1")
     
-    elif cmd == "status-h4":
+    elif cmd == "bl-status-h4":
         cmd_status("h4")
     
-    elif cmd == "status-h8":
+    elif cmd == "bl-status-h8":
         cmd_status("h8")
     
-    elif cmd == "status-h12":
+    elif cmd == "bl-status-h12":
         cmd_status("h12")
     
-    # === INFO ===
-    elif cmd == "info":
+    # === BL INFO ===
+    elif cmd == "bl-info":
         cmd_info()
     
     # === QUOTA COMMANDS ===
@@ -161,6 +184,112 @@ if __name__ == "__main__":
         from src.quota import cmd_quota_history
         days = int(sys.argv[2]) if len(sys.argv) > 2 else 30
         cmd_quota_history(days)
+    
+    # === DATA LOADER COMMANDS ===
+    elif cmd == "data":
+        from src.data_loader import DataLoader
+        loader = DataLoader()
+        print("=" * 60)
+        print("DATA CACHE STATUS")
+        print("=" * 60)
+        freshness = loader.check_data_freshness()
+        print(freshness.to_string(index=False))
+        
+        stale = freshness[freshness['age_days'] > 1] if 'age_days' in freshness.columns else None
+        if stale is not None and len(stale) > 0:
+            print(f"\n⚠️  {len(stale)} metrics are stale (>1 day old)")
+            print("Run 'python run.py data-refresh' to update from BRK (FREE)")
+    
+    elif cmd == "data-refresh":
+        from src.data_loader import DataLoader
+        loader = DataLoader()
+        print("=" * 60)
+        print("REFRESHING CACHE FROM BRK API (FREE)")
+        print("=" * 60)
+        
+        # Core metrics for our strategies (including James Check framework)
+        core_metrics = [
+            # Price & Technical
+            'price', 'price_200d_sma',
+            
+            # SOPR Family
+            'sopr', 'sopr_sth', 'sopr_lth',
+            
+            # MVRV Family  
+            'mvrv', 'mvrv_sth', 'mvrv_lth',
+            
+            # NUPL Family
+            'nupl', 'nupl_lth', 'nupl_sth',
+            'unrealized_profit', 'unrealized_loss',
+            
+            # Realized Metrics
+            'realized_cap', 'realized_price',
+            'realized_price_sth', 'realized_price_lth',
+            'realized_profit', 'realized_loss',
+            
+            # Supply
+            'supply_lth', 'supply_sth',
+            
+            # Cointime Economics
+            'liveliness', 'aviv', 'active_price', 'vaulted_price',
+            'cointime_price', 'investor_cap', 'thermo_cap',
+            
+            # Sell-side Risk (James Check - volatility prediction)
+            'sell_side_risk', 'sell_side_risk_sth',
+            
+            # Mining
+            'puell_multiple',
+        ]
+        
+        loader.refresh_cache(metrics=core_metrics, source='brk')
+    
+    elif cmd == "data-load":
+        from src.data_loader import DataLoader
+        
+        if len(sys.argv) < 3:
+            print("Usage: python run.py data-load price,sopr,mvrv")
+            sys.exit(1)
+        
+        metrics = sys.argv[2].split(',')
+        loader = DataLoader()
+        
+        print(f"Loading: {metrics}")
+        df = loader.load(metrics, source='brk')
+        
+        print(f"\nLoaded {len(df)} rows")
+        print(f"Date range: {df.index.min().date()} to {df.index.max().date()}")
+        print(f"\nLatest values:")
+        print(df.tail(5).to_string())
+    
+    elif cmd == "signals":
+        from src.data_loader import print_signals
+        print_signals('brk')
+    
+    elif cmd == "signals-generate":
+        from research.signals import generate_all_signals
+        generate_all_signals()
+    
+    # === BRK COMMANDS (FREE, daily only) ===
+    elif cmd == "brk-sync":
+        from src.brk_downloader import cmd_sync as brk_sync
+        brk_sync()
+    
+    elif cmd == "brk-backfill":
+        from src.brk_downloader import cmd_backfill as brk_backfill
+        brk_backfill()
+    
+    elif cmd == "brk-status":
+        from src.brk_downloader import cmd_status as brk_status
+        brk_status()
+    
+    elif cmd == "brk-refresh":
+        from src.brk_downloader import cmd_refresh as brk_refresh
+        brk_refresh()
+    
+    elif cmd == "brk-discover":
+        from src.brk_downloader import cmd_discover as brk_discover
+        query = sys.argv[2] if len(sys.argv) > 2 else None
+        brk_discover(query)
     
     else:
         print(f"Unknown command: {cmd}\n")

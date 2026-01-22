@@ -41,12 +41,12 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 
 # Resolution-specific directories
 RESOLUTION_DIRS = {
-    "d1": DATA_DIR / "daily",
-    "h1": DATA_DIR / "hourly",
-    "h4": DATA_DIR / "h4",
-    "h8": DATA_DIR / "h8",
-    "h12": DATA_DIR / "h12",
-    "block": DATA_DIR / "block",
+    "d1": DATA_DIR / "bl" / "daily",
+    "h1": DATA_DIR / "bl" / "hourly",
+    "h4": DATA_DIR / "bl" / "h4",
+    "h8": DATA_DIR / "bl" / "h8",
+    "h12": DATA_DIR / "bl" / "h12",
+    "block": DATA_DIR / "bl" / "block",
 }
 
 # Ensure directories exist
@@ -619,8 +619,9 @@ def create_engine(resolution: str = "d1") -> SyncEngine:
     storage_dir = RESOLUTION_DIRS.get(resolution, DATA_DIR / resolution)
     storage = ParquetStorage(storage_dir)
     
-    # Use resolution-specific state file
-    state_path = CONFIG_DIR / f"sync_state_{resolution}.json"
+    # Use resolution-specific state file in bl config
+    state_path = CONFIG_DIR / "bl" / f"sync_state_{resolution}.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
     
     return SyncEngine(api, storage, metrics, state_path, resolution)
 
