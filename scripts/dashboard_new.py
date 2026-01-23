@@ -988,10 +988,11 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
             {' | Live price enabled' if live_price else ''}
         </div>
         <div class="nav">
+            <a href="dashboard_signals.html">🎯 Trading Signals</a>
             <a href="dashboard_quality.html">📊 Data Quality</a>
         </div>
     </div>
-    
+
     <div class="container">
         <!-- PILLAR 1: VALUATION -->
         <div class="pillar-section">
@@ -1041,39 +1042,10 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
                 {generate_miner_card(ctx)}
             </div>
         </div>
-        
-        <!-- SIGNALS SYNTHESIS -->
-        <div class="signals-section">
-            <div class="signals-header">
-                <h2>🎯 Signal Synthesis</h2>
-                <p>Combining pillars into actionable signals — the output of the Checkonchain Framework</p>
-            </div>
-
-            <!-- Entry Signals Row -->
-            <div style="margin-bottom:24px;">
-                <h3 style="color:#22c55e; margin-bottom:12px;">🟢 Entry Signals (When to Buy)</h3>
-                <div class="grid">
-                    {generate_checkmate_card(ctx)}
-                    {generate_btd_card(ctx)}
-                    {generate_signals_card(ctx.get('entry_signals', []), 'Additional Entry Signals', '🟢')}
-                </div>
-            </div>
-
-            <!-- Exit Signals Row -->
-            <div style="margin-bottom:24px;">
-                <h3 style="color:#ef4444; margin-bottom:12px;">🔴 Exit Signals (When to Sell/Reduce)</h3>
-                <div class="grid">
-                    {generate_8_metric_exit_card(ctx)}
-                    {generate_sth_zones_card(ctx)}
-                    {generate_lth_distribution_card(ctx)}
-                    {generate_signals_card(ctx.get('exit_signals', []), 'Additional Exit Signals', '🔴')}
-                </div>
-            </div>
-        </div>
     </div>
     
     <div class="footer">
-        <p>James Check Framework Implementation | Run calculate.py to update signals</p>
+        <p>James Check Framework — 6 Pillars of On-Chain Analysis | Run <code>python scripts/calculate.py</code> to update</p>
     </div>
 </body>
 </html>
