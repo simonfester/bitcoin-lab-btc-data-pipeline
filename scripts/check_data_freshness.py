@@ -55,16 +55,16 @@ def get_file_freshness(file_path: Path, expected_freq='1D') -> dict:
         age = now - last_timestamp
         age_hours = age.total_seconds() / 3600
 
-        # Resolution-aware freshness thresholds
-        # Fresh = within expected interval + 1 period buffer
-        # Stale = older than fresh threshold (hasn't updated on schedule)
+        # Strict resolution-aware freshness thresholds
+        # Fresh = within the expected update interval (no buffers)
+        # Stale = older than the interval (data is behind)
 
         thresholds = {
-            '1H': 2,      # Hourly: fresh if ≤ 2h (1h + 1h buffer)
-            '4H': 5,      # 4-hourly: fresh if ≤ 5h (4h + 1h buffer)
-            '8H': 9,      # 8-hourly: fresh if ≤ 9h (8h + 1h buffer)
-            '12H': 13,    # 12-hourly: fresh if ≤ 13h (12h + 1h buffer)
-            '1D': 26,     # Daily: fresh if ≤ 26h (24h + 2h buffer)
+            '1H': 1,      # Hourly: fresh if ≤ 1h
+            '4H': 4,      # 4-hourly: fresh if ≤ 4h
+            '8H': 8,      # 8-hourly: fresh if ≤ 8h
+            '12H': 12,    # 12-hourly: fresh if ≤ 12h
+            '1D': 24,     # Daily: fresh if ≤ 24h
         }
 
         fresh_threshold = thresholds.get(expected_freq, thresholds['1D'])
@@ -340,12 +340,12 @@ def print_freshness_report(results: list, as_json: bool = False):
     if error_count > 0:
         print(f"⚠️  Errors:        {error_count}/{total}")
 
-    print("\nFreshness Thresholds (resolution-aware):")
-    print("  Hourly (h1):   Fresh if ≤ 2h  (1h interval + 1h buffer)")
-    print("  4-hourly (h4): Fresh if ≤ 5h  (4h interval + 1h buffer)")
-    print("  8-hourly (h8): Fresh if ≤ 9h  (8h interval + 1h buffer)")
-    print("  12-hourly:     Fresh if ≤ 13h (12h interval + 1h buffer)")
-    print("  Daily:         Fresh if ≤ 26h (24h interval + 2h buffer)")
+    print("\nFreshness Thresholds (strict - no buffers):")
+    print("  Hourly (h1):   Fresh if ≤ 1h")
+    print("  4-hourly (h4): Fresh if ≤ 4h")
+    print("  8-hourly (h8): Fresh if ≤ 8h")
+    print("  12-hourly:     Fresh if ≤ 12h")
+    print("  Daily:         Fresh if ≤ 24h")
 
     if fresh_count == total:
         print("\n✅ All data sources are FRESH")
