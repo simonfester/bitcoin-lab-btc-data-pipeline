@@ -44,7 +44,124 @@ def run_quality_check():
         }
 
 
-def generate_html(quality_results):
+def run_freshness_check():
+    """Run freshness checker and capture results as JSON"""
+    try:
+        # Run freshness checker script with JSON output
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / 'scripts' / 'check_data_freshness.py'), '--json'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        # Parse JSON output
+        if result.returncode == 0 or result.stdout:
+            freshness_data = json.loads(result.stdout)
+            return {
+                'data': freshness_data,
+                'success': True,
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+        else:
+            return {
+                'data': [],
+                'success': False,
+                'error': result.stderr,
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+    except Exception as e:
+        return {
+            'data': [],
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+
+def generate_freshness_html(freshness_results):
+    """Generate HTML for data freshness section"""
+
+    if not freshness_results.get('success'):
+        return '''
+        <div class="section-header">
+            <h3>⏰ Data Freshness</h3>
+        </div>
+        <div style="background: rgba(255, 0, 0, 0.2); padding: 20px; border-radius: 8px; text-align: center;">
+            <p>❌ Unable to check data freshness</p>
+            <p style="color: #dc3545; font-size: 0.9rem;">Error: {}</p>
+        </div>
+        '''.format(freshness_results.get('error', 'Unknown error'))
+
+    freshness_data = freshness_results.get('data', [])
+
+    if not freshness_data:
+        return '''
+        <div class="section-header">
+            <h3>⏰ Data Freshness</h3>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 8px; text-align: center;">
+            <p>No freshness data available</p>
+        </div>
+        '''
+
+    # Generate freshness cards
+    cards_html = ""
+    for item in freshness_data:
+        source = item.get('source', 'Unknown')
+        resolution = item.get('resolution', '')
+        status = item.get('status', 'unknown')
+        last_update = item.get('last_update', 'Unknown')
+        age_hours = item.get('age_hours')
+        total_files = item.get('total_files', 0)
+
+        # Status display
+        status_text = status.upper().replace('_', ' ')
+
+        # Icon based on status
+        status_icons = {
+            'fresh': '✅',
+            'acceptable': '🟡',
+            'stale': '🟠',
+            'very_stale': '🔴',
+            'missing': '❌',
+            'empty': '❌',
+            'error': '⚠️',
+            'unknown': '❓'
+        }
+        icon = status_icons.get(status, '❓')
+
+        # Age display
+        if age_hours is not None:
+            if age_hours < 24:
+                age_display = f"{age_hours:.1f}h ago"
+            else:
+                days = age_hours / 24
+                age_display = f"{days:.1f}d ago ({age_hours:.0f}h)"
+        else:
+            age_display = "Unknown"
+
+        cards_html += f'''
+        <div class="freshness-card {status}">
+            <h4>{icon} {source} <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">({resolution})</span></h4>
+            <div class="status {status}">{status_text}</div>
+            <div class="detail">Last Update: {last_update}</div>
+            <div class="age">Age: {age_display}</div>
+            <div class="detail" style="margin-top: 8px; color: rgba(255,255,255,0.5);">{total_files} files</div>
+        </div>
+        '''
+
+    return f'''
+    <div class="section-header">
+        <h3>⏰ Data Freshness</h3>
+    </div>
+    <div class="freshness-grid">
+        {cards_html}
+    </div>
+    '''
+
+
+def generate_html(quality_results, freshness_results):
     """Generate HTML dashboard for data quality"""
 
     output = quality_results['stdout']
@@ -312,6 +429,95 @@ def generate_html(quality_results):
         .refresh-btn:hover {{
             transform: scale(1.05);
         }}
+
+        .freshness-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }}
+
+        .freshness-card {{
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+        }}
+
+        .freshness-card.fresh {{
+            border-left: 4px solid #28a745;
+        }}
+
+        .freshness-card.acceptable {{
+            border-left: 4px solid #ffc107;
+        }}
+
+        .freshness-card.stale {{
+            border-left: 4px solid #fd7e14;
+        }}
+
+        .freshness-card.very_stale {{
+            border-left: 4px solid #dc3545;
+        }}
+
+        .freshness-card h4 {{
+            margin-bottom: 10px;
+            color: white;
+            font-size: 1.1rem;
+        }}
+
+        .freshness-card .status {{
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }}
+
+        .freshness-card .status.fresh {{
+            background: #28a745;
+            color: white;
+        }}
+
+        .freshness-card .status.acceptable {{
+            background: #ffc107;
+            color: #1a1a1a;
+        }}
+
+        .freshness-card .status.stale {{
+            background: #fd7e14;
+            color: white;
+        }}
+
+        .freshness-card .status.very_stale {{
+            background: #dc3545;
+            color: white;
+        }}
+
+        .freshness-card .detail {{
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            margin: 5px 0;
+        }}
+
+        .freshness-card .age {{
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.85rem;
+        }}
+
+        .section-header {{
+            background: rgba(255, 255, 255, 0.1);
+            border-left: 4px solid #17a2b8;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }}
+
+        .section-header h3 {{
+            color: #17a2b8;
+            margin: 0;
+        }}
     </style>
 </head>
 <body>
@@ -350,6 +556,8 @@ def generate_html(quality_results):
                 <div class="value">{low_severity}</div>
             </div>
         </div>
+
+        {generate_freshness_html(freshness_results)}
 
         <div class="output-section">
             <h3>📋 Detailed Quality Report</h3>
@@ -412,10 +620,15 @@ def main():
     # Run quality check
     results = run_quality_check()
 
+    print("Running freshness checks...")
+
+    # Run freshness check
+    freshness_results = run_freshness_check()
+
     print("\nGenerating HTML dashboard...")
 
     # Generate HTML
-    html = generate_html(results)
+    html = generate_html(results, freshness_results)
 
     # Write to file
     OUTPUT_PATH.write_text(html)
