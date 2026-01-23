@@ -56,15 +56,15 @@ def get_file_freshness(file_path: Path, expected_freq='1D') -> dict:
         age_hours = age.total_seconds() / 3600
 
         # Strict resolution-aware freshness thresholds
-        # Fresh = within the expected update interval (no buffers)
-        # Stale = older than the interval (data is behind)
+        # Fresh = within the expected update interval
+        # Note: Daily aggregates have 1-day publication lag (normal)
 
         thresholds = {
             '1H': 1,      # Hourly: fresh if ≤ 1h
             '4H': 4,      # 4-hourly: fresh if ≤ 4h
             '8H': 8,      # 8-hourly: fresh if ≤ 8h
             '12H': 12,    # 12-hourly: fresh if ≤ 12h
-            '1D': 24,     # Daily: fresh if ≤ 24h
+            '1D': 48,     # Daily: fresh if ≤ 48h (allows for 1-day publication lag)
         }
 
         fresh_threshold = thresholds.get(expected_freq, thresholds['1D'])
@@ -340,12 +340,12 @@ def print_freshness_report(results: list, as_json: bool = False):
     if error_count > 0:
         print(f"⚠️  Errors:        {error_count}/{total}")
 
-    print("\nFreshness Thresholds (strict - no buffers):")
+    print("\nFreshness Thresholds:")
     print("  Hourly (h1):   Fresh if ≤ 1h")
     print("  4-hourly (h4): Fresh if ≤ 4h")
     print("  8-hourly (h8): Fresh if ≤ 8h")
     print("  12-hourly:     Fresh if ≤ 12h")
-    print("  Daily:         Fresh if ≤ 24h")
+    print("  Daily:         Fresh if ≤ 48h (allows for 1-day publication lag)")
 
     if fresh_count == total:
         print("\n✅ All data sources are FRESH")
