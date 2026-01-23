@@ -20,63 +20,461 @@ This project implements James Check's on-chain analysis framework for Bitcoin tr
 ## Three-Stage Pipeline Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│   sync.py   │ ──▶ │ calculate.py │ ──▶ │ dashboard.py │
-│ (Data Sync) │     │  (Signals)   │     │  (Display)   │
-└─────────────┘     └──────────────┘     └──────────────┘
-       │                   │                    │
-       ▼                   ▼                    ▼
-  data/brk/          data/signals/        dashboard.html
-  data/glassnode/    *.parquet
-  (raw parquets)     *.json
+┌─────────────────────────────────────────────┐
+│         STAGE 1: DATA SOURCES               │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │   BRK    │  │ BitcoinLab│  │Glassnode │  │
+│  │  (FREE)  │  │  (QUOTA)  │  │  (PAID)  │  │
+│  │  Daily   │  │ h1/h4/h8  │  │ Derives  │  │
+│  │41 metrics│  │ 5 metrics │  │3 metrics │  │
+│  └────┬─────┘  └────┬──────┘  └────┬─────┘  │
+└───────┼─────────────┼──────────────┼─────────┘
+        │             │              │
+        ▼             ▼              ▼
+   data/brk/      data/bl/      data/glassnode/
+    daily/      hourly/h4/h8/      daily/
+  *.parquet      *.parquet       *.parquet
+        │             │              │
+        └─────────────┼──────────────┘
+                      ▼
+        ┌─────────────────────────┐
+        │  STAGE 2: CALCULATIONS  │
+        │   scripts/calculate.py  │
+        │  - Compute signals      │
+        │  - Generate features    │
+        │  - Apply strategies     │
+        └────────────┬────────────┘
+                     ▼
+              data/signals/
+           dashboard_context.json
+                *.parquet
+                     │
+                     ▼
+        ┌─────────────────────────┐
+        │   STAGE 3: DISPLAY      │
+        │ scripts/dashboard_new.py│
+        │  - HTML rendering       │
+        │  - Live price (optional)│
+        └────────────┬────────────┘
+                     ▼
+              dashboard.html
 ```
 
-### Stage 1: Data Sync (`sync_all.py`, `run.py`)
-- Downloads raw on-chain data from APIs
-- Outputs to `data/brk/daily/`, `data/glassnode/daily/`
-- Run: `python run.py brk-sync`
+### Stage 1: Data Sync (`run.py`)
+**Multi-source data acquisition:**
+- **BRK** (FREE): `python run.py brk-sync` → `data/brk/daily/` (41 metrics)
+- **Bitcoin Lab** (QUOTA): `python run.py bl-sync-hourly` → `data/bl/hourly/` (5 metrics)
+- **Glassnode** (PAID): Manual sync → `data/glassnode/daily/` (derivatives)
 
 ### Stage 2: Signal Calculation (`scripts/calculate.py`)
-- Reads raw parquets, computes all metrics and signals
+- Reads raw parquets from all sources
+- Computes signals using James Check framework (6 pillars)
 - Outputs to `data/signals/dashboard_context.json` + parquets
 - Run: `python scripts/calculate.py`
 
 ### Stage 3: Dashboard Display (`scripts/dashboard_new.py`)
 - Pure HTML rendering, no calculations
+- Displays 6 pillars with current market status
 - Optionally fetches live price from Coinbase
 - Run: `python scripts/dashboard_new.py`
 
-## Data Sources
+## Data Sources & Availability
+
+### Overview
 
 **DO NOT USE GLASSNODE API** - Use Bitcoin Lab API and BRK API as primary sources.
 
-| Source | Cost | Use Case |
-|--------|------|----------|
-| **BRK** | FREE | Primary source for all daily on-chain metrics |
-| **Bitcoin Lab** | Paid (quota) | Backup, hourly data |
-| **Glassnode** | Paid | Derivatives data only (funding rates, liquidations) |
+| Source | Cost | Resolutions | Use Case |
+|--------|------|-------------|----------|
+| **BRK** | FREE | Daily only | **PRIMARY** - All daily on-chain metrics (41 metrics) |
+| **Bitcoin Lab** | Paid (1M quota/week) | Hourly, 4h, 8h, 12h, Daily | **SECONDARY** - High-frequency data & backups |
+| **Glassnode** | Paid | Daily | Derivatives only (funding rates, liquidations) |
+
+### Current Data Availability (Last Synced: 2026-01-23)
+
+#### BRK (FREE - PRIMARY SOURCE)
+**Status**: ✅ Fully synced
+**Resolution**: Daily only
+**Date Range**: 2009-01-03 → 2026-01-23 (synced today)
+**Metrics**: 41 on-chain metrics
+**Total Rows**: 248,739 (~6,225 days × 41 metrics)
+
+**Available Metrics:**
+- **Price & Technical**: price, price_200d_sma, market_cap
+- **SOPR Family**: sopr, sopr_sth, sopr_lth, sopr_adjusted
+- **MVRV Family**: mvrv, mvrv_sth, mvrv_lth
+- **NUPL Family**: nupl, nupl_sth, nupl_lth, unrealized_profit, unrealized_loss
+- **Realized Metrics**: realized_cap, realized_price, realized_price_sth, realized_price_lth, realized_profit, realized_loss
+- **Supply**: supply_total, supply_lth, supply_sth, supply_in_profit, supply_in_loss
+- **Cointime Economics**: liveliness, aviv, active_price, vaulted_price, cointime_price, investor_cap, thermo_cap
+- **Sell-side Risk**: sell_side_risk, sell_side_risk_sth, sell_side_risk_lth
+- **Mining**: puell_multiple, difficulty, coindays_destroyed
+- **Activity**: net_realized_pnl, true_market_mean_price
+
+**Sync Commands:**
+```bash
+python run.py brk-sync          # Incremental daily sync (FREE)
+python run.py brk-backfill      # Full historical download
+python run.py brk-status        # Check sync status
+```
+
+#### Bitcoin Lab (PAID - HIGH FREQUENCY)
+**Status**: ✅ Multi-resolution synced
+**Quota**: 776,833 / 1,000,000 DPs remaining (77.7%)
+**Quota Reset**: Every 7 days (next: 2026-01-30)
+**Date Range**: 2015-01-01 → 2026-01-23
+
+**Resolution Coverage:**
+
+| Resolution | Metrics | Rows/Metric | Total Rows | Date Range | Last Sync |
+|------------|---------|-------------|------------|------------|-----------|
+| **h1** (hourly) | 5 | 96,735 | 483,675 | 2015-01-01 → 2026-01-23 11:00 | ✅ 2026-01-23 |
+| **h4** (4-hourly) | 5 | 24,243 | 121,215 | 2015-01-01 → 2026-01-23 08:00 | ✅ 2026-01-23 |
+| **h8** (8-hourly) | 5 | 12,121 | 60,605 | 2015-01-01 → 2026-01-23 00:00 | ✅ 2026-01-23 |
+| **h12** (12-hourly) | 5 | 8,081 | 40,405 | 2015-01-01 → 2026-01-23 00:00 | ✅ 2026-01-23 |
+
+**Available Metrics at All Resolutions:**
+1. **price** - BTC/USD price
+2. **sopr** - Spent Output Profit Ratio (all holders)
+3. **sopr_lth** - SOPR for long-term holders (>155 days)
+4. **sopr_sth** - SOPR for short-term holders (<155 days)
+5. **realized_loss** - Total realized losses in USD
+
+**Sync Commands:**
+```bash
+# Check quota before syncing
+python run.py quota                # Show remaining quota
+
+# Sync specific resolutions
+python run.py bl-sync-hourly       # Hourly (h1)
+python run.py bl-sync-h4           # 4-hourly
+python run.py bl-sync-h8           # 8-hourly
+python run.py bl-sync-h12          # 12-hourly
+python run.py bl-sync              # All resolutions (uses more quota)
+
+# Backfill historical data
+python run.py bl-backfill-hourly   # Backfill from 2015-01-01
+python run.py bl-backfill-h4       # 4-hourly backfill
+python run.py bl-backfill-all      # WARNING: Uses significant quota
+
+# Check status
+python run.py bl-status            # All resolutions status
+python run.py bl-status-hourly     # Hourly status only
+python run.py quota-estimate 30 h1 # Estimate cost for 30 days of hourly
+```
+
+**Quota Costs (per metric):**
+- **h1** (hourly): ~24 datapoints/day
+- **h4** (4-hourly): ~6 datapoints/day
+- **h8** (8-hourly): ~3 datapoints/day
+- **h12** (12-hourly): ~2 datapoints/day
+- **d1** (daily): ~1 datapoint/day
+
+**Example**: Syncing 30 days of hourly data for 5 metrics = 30 × 24 × 5 = 3,600 datapoints
+
+#### Glassnode (PAID - DERIVATIVES ONLY)
+**Status**: ⚠️ Manual sync required
+**Resolution**: Daily only
+**Use Case**: Derivatives data (funding rates, liquidations)
+
+**Available Metrics:**
+- `funding_rate` - Perpetual swap funding rates
+- `liq_long` - Long liquidations volume
+- `liq_short` - Short liquidations volume
+
+**Note**: Needed for STRAT-004 and STRAT-005 (Buy The Dip strategies) which require derivatives data for signal confirmation.
 
 ### API Credentials
-- **Bitcoin Lab Token**: `ae92658e-373f-4fce-a5b3-1cfc1ffb4da6`
-- **Bitcoin Lab URL**: `https://api.researchbitcoin.net`
-- **BRK URL**: `https://next.bitview.space` (no token needed)
+
+**Bitcoin Lab:**
+- Token: `ae92658e-373f-4fce-a5b3-1cfc1ffb4da6`
+- URL: `https://api.researchbitcoin.net`
+- Tier: 2 (1M datapoints/week)
+- Token Expires: 2026-04-06
+
+**BRK:**
+- URL: `https://next.bitview.space`
+- Authentication: None (public API)
+- Rate Limits: None (FREE)
+
+**Glassnode:**
+- URL: `https://api.glassnode.com`
+- Token: (stored in environment variable)
+- Use only for derivatives data
+
+### Data Directory Structure
+
+```
+data/
+├── brk/
+│   └── daily/              # BRK daily metrics (41 metrics, FREE)
+│       ├── price.parquet
+│       ├── sopr.parquet
+│       ├── mvrv.parquet
+│       └── ... (38 more)
+├── bl/                     # Bitcoin Lab (paid quota)
+│   ├── hourly/             # h1 resolution (5 metrics)
+│   │   ├── price.parquet
+│   │   ├── sopr.parquet
+│   │   ├── sopr_lth.parquet
+│   │   ├── sopr_sth.parquet
+│   │   └── realized_loss.parquet
+│   ├── h4/                 # 4-hourly (5 metrics)
+│   ├── h8/                 # 8-hourly (5 metrics)
+│   └── h12/                # 12-hourly (5 metrics)
+└── glassnode/
+    └── daily/              # Derivatives data
+        ├── funding_rate.parquet
+        ├── liq_long.parquet
+        └── liq_short.parquet
+```
+
+### Data Source Recommendations
+
+**For Daily Analysis (Backtesting, Strategies):**
+- ✅ **Use BRK** - Free, comprehensive (41 metrics), reliable
+- ❌ Don't use Bitcoin Lab daily - wastes quota
+
+**For Intraday/High-Frequency Analysis:**
+- ✅ **Use Bitcoin Lab** - Only source for hourly/4h/8h/12h data
+- 📊 Monitor quota usage: `python run.py quota`
+- 💡 Start with h4 or h8 (lower quota cost) before going to h1
+
+**For Derivatives Analysis:**
+- ✅ **Use Glassnode** - Only source for funding rates and liquidations
+- 🎯 Required for STRAT-004 and STRAT-005 (Buy The Dip)
+
+**Data Loading Best Practices:**
+```python
+from src.data_loader import DataLoader
+
+# Load daily data from BRK (FREE)
+loader = DataLoader()
+df = loader.load(['price', 'sopr', 'mvrv'], source='brk', resolution='d1')
+
+# Load hourly data from Bitcoin Lab (uses cache)
+df_hourly = loader.load(['price', 'sopr'], source='bl', resolution='h1')
+
+# Check data freshness
+freshness = loader.check_data_freshness()
+print(freshness)
+
+# Refresh stale data from BRK (FREE)
+loader.refresh_cache(metrics=['price', 'sopr'], source='brk')
+```
+
+### Quota Management Tips
+
+1. **Use BRK for daily backtesting** - Save Bitcoin Lab quota for intraday work
+2. **Cache aggressively** - DataLoader caches to minimize API calls
+3. **Sync incrementally** - Only fetch new data since last sync
+4. **Monitor usage**: `python run.py quota` and `python run.py quota-history`
+5. **Plan ahead**: `python run.py quota-estimate 30 h1` before large syncs
+6. **Weekly refresh** - Quota resets every 7 days (1M datapoints)
+
+### Data Freshness
+
+Run daily to keep data current:
+```bash
+# Morning routine (FREE)
+python run.py brk-sync              # Sync daily on-chain data
+python run.py data-refresh          # Refresh cache
+
+# Check what needs updating
+python run.py data                  # Show cache status
+python run.py brk-status            # Confirm BRK sync
+python run.py bl-status-hourly      # Check hourly data
+
+# Optional: Sync Bitcoin Lab hourly (uses ~120 DPs for 5 metrics)
+python run.py bl-sync-hourly        # Only if doing intraday analysis
+```
+
+## Data Quality & Validation ⚠️ ACTION REQUIRED
+
+### Current Status (as of 2026-01-23)
+
+**Data Quality Scan Results:**
+- ✅ **BRK Daily**: Perfect - All 41 metrics clean (0 issues in 248,739 rows)
+- ⚠️ **Bitcoin Lab Hourly**: 5 minor nulls in SOPR metrics (0.001% of data)
+  - `sopr`: 1 null value
+  - `sopr_lth`: 3 null values
+  - `sopr_sth`: 1 null value
+
+**Current Validation (BASIC):**
+- ✅ Automatic null removal after API fetch
+- ✅ API error handling and tracking
+- ✅ Sync state monitoring
+- ✅ Data freshness checks
+
+**Missing Validation (NEEDS IMPLEMENTATION):**
+- ❌ Outlier detection (extreme value checks)
+- ❌ Data consistency validation (cross-metric relationships)
+- ❌ Time series gap detection and reporting
+- ❌ Statistical validation (change rate limits)
+- ❌ Cross-source validation (BRK vs Bitcoin Lab comparison)
+- ❌ Pre-trading validation checks
+
+### Immediate Actions Needed
+
+#### 1. Fix Known Issues (30 seconds)
+```bash
+# Fix the 5 null values in Bitcoin Lab hourly data
+python scripts/fix_data_issues.py
+
+# Verify fix worked
+python run.py data
+```
+
+#### 2. Before Live Trading (CRITICAL)
+
+**Must implement:**
+1. **Outlier detection** for critical metrics (price, sopr, mvrv)
+   - Detect extreme values (e.g., MVRV > 10, SOPR > 5)
+   - Alert on impossible values (negative price, MVRV < 0)
+   - Validate change rates (e.g., price change > 50%/day)
+
+2. **Pre-trading validation**
+   - Check data freshness (< 24 hours old)
+   - Verify no nulls in critical metrics
+   - Validate metric consistency
+   - Confirm all required metrics present
+
+3. **Consistency checks**
+   - MVRV should equal price / realized_price
+   - supply_total should only increase (monotonic)
+   - Validate ratio relationships
+
+Example validation before trading:
+```python
+def validate_for_trading(df):
+    """Pre-flight checks before executing trades"""
+    checks = {
+        'data_fresh': (datetime.now() - df.index[-1]) < timedelta(hours=24),
+        'no_nulls': df[CRITICAL_METRICS].isnull().sum().sum() == 0,
+        'no_outliers': check_outliers(df),
+        'consistent': validate_mvrv_consistency(df),
+        'complete': all_required_metrics_present(df)
+    }
+
+    if not all(checks.values()):
+        raise ValidationError(f"Trading validation failed: {checks}")
+
+    return True
+```
+
+#### 3. Recommended Quality Checks
+
+**Add to daily routine:**
+```bash
+# Check data quality
+python scripts/check_data_quality.py  # Scan for issues
+
+# Monitor sync status
+python run.py brk-status              # Check for errors
+python run.py data                    # Check freshness
+
+# Fix any issues found
+python scripts/fix_data_issues.py     # Auto-fix common issues
+```
+
+### Quality Check Implementation Plan
+
+**Phase 1: Critical (Before Live Trading)**
+- [ ] Fix existing nulls in Bitcoin Lab data ✅ (script ready)
+- [ ] Add outlier detection module
+- [ ] Add pre-trading validation
+- [ ] Add gap detection and reporting
+- [ ] Create `src/data_quality.py` module
+
+**Phase 2: Important (Before Paper Trading at Scale)**
+- [ ] Implement flexible cleaning strategies (forward/backward fill, interpolation)
+- [ ] Add cross-metric consistency validation
+- [ ] Add statistical validation (change rates, distributions)
+- [ ] Create quality report dashboard
+
+**Phase 3: Optimization (Production)**
+- [ ] Cross-source validation (BRK vs Bitcoin Lab comparison)
+- [ ] Real-time anomaly detection
+- [ ] Automated alerting (email/Telegram)
+- [ ] Historical quality tracking and reporting
+
+### Validation Rules by Metric
+
+**Price Metrics:**
+- Range: > 0
+- Change rate: < 50% per day (typical < 10%)
+- No nulls allowed
+
+**SOPR Family:**
+- Range: 0.5 - 5.0 (typical 0.8 - 1.2)
+- Must be > 0
+- Can forward fill small gaps (< 3 hours)
+
+**MVRV Family:**
+- Range: 0.1 - 10.0 (extreme bull can exceed)
+- Consistency: MVRV ≈ price / realized_price (tolerance: 1%)
+- Cross-check with NUPL
+
+**Supply Metrics:**
+- supply_total: Must be monotonically increasing
+- Range: 0 - 21,000,000 BTC
+- supply_lth + supply_sth ≈ supply_total (tolerance: 0.1%)
+
+**Realized Metrics:**
+- realized_price, realized_cap: Must be > 0
+- Monotonic: realized_cap should generally increase
+- realized_profit + realized_loss should balance
+
+### Documentation
+
+**See full recommendations:**
+- `docs/DATA_QUALITY_RECOMMENDATIONS.md` - Complete implementation guide
+- `scripts/fix_data_issues.py` - Fix current known issues
+- `scripts/check_data_quality.py` - Comprehensive quality scan (needs creation)
+
+### Risk of Not Implementing
+
+**Without proper validation, you risk:**
+- Trading on stale data (losses from timing)
+- Acting on API errors (bad data → bad signals)
+- Missing critical data gaps (incomplete picture)
+- False signals from outliers (bad trades)
+- Consistency violations (conflicting metrics)
+
+**Bottom Line:** Current data is GOOD, but validation is BASIC. Implement Phase 1 (outlier detection + pre-trading checks) BEFORE live trading to avoid costly errors.
+
+---
 
 ## Key Files
 
 ### Scripts
 | File | Purpose |
 |------|---------|
+| `run.py` | CLI entry point - sync, backfill, status, quota management |
 | `scripts/calculate.py` | Signal computation engine - all metric calculations |
 | `scripts/dashboard_new.py` | Pure HTML rendering layer (6 pillars layout) |
 | `scripts/dashboard.py` | Legacy dashboard (monolithic) |
 | `scripts/sync_all.py` | Data synchronization |
-| `run.py` | CLI entry point for all commands |
+| `scripts/backtest_framework.py` | Custom backtest engine (use VectorBT instead) |
+
+### Strategy Configs
+| File | Strategy | Status |
+|------|----------|--------|
+| `config/strategies/strat001_sopr_mvrv_trail.json` | SOPR Double Capitulation + MVRV Trail | PAPER-READY |
+| `config/strategies/strat002_long_term_capitulation.json` | Long-term Capitulation (+5,754%) | VALIDATED |
+| `config/strategies/strat003_short_term_active.json` | Short-term Active (+5,973%) | PAPER-READY |
+| `config/strategies/strat004_james_check_5indicator.json` | 5-Indicator Buy-the-Dip | BACKTESTED |
+| `config/strategies/strat005_buy_the_dip_momentum_exit.json` | Buy The Dip + Momentum Exit (+3,017%) | PAPER-READY |
 
 ### Data
 | Path | Contents |
 |------|----------|
-| `data/brk/daily/*.parquet` | BRK on-chain metrics (FREE) |
-| `data/glassnode/daily/*.parquet` | Derivatives metrics |
+| `data/brk/daily/*.parquet` | BRK on-chain metrics - 41 metrics, daily (FREE) |
+| `data/bl/hourly/*.parquet` | Bitcoin Lab hourly (h1) - 5 metrics, 2015-2026 |
+| `data/bl/h4/*.parquet` | Bitcoin Lab 4-hourly - 5 metrics, 2015-2026 |
+| `data/bl/h8/*.parquet` | Bitcoin Lab 8-hourly - 5 metrics, 2015-2026 |
+| `data/bl/h12/*.parquet` | Bitcoin Lab 12-hourly - 5 metrics, 2015-2026 |
+| `data/glassnode/daily/*.parquet` | Derivatives metrics (funding, liquidations) |
 | `data/signals/dashboard_context.json` | Pre-computed signals for dashboard |
 | `data/signals/*.parquet` | Signal time series |
 
@@ -107,17 +505,32 @@ This project implements James Check's on-chain analysis framework for Bitcoin tr
 ## Common Commands
 
 ```bash
-# Data sync (run daily)
-python run.py brk-sync              # Sync BRK data (FREE)
-python run.py bl-sync-daily         # Sync Bitcoin Lab (uses quota)
+# ===== DAILY DATA SYNC (FREE) =====
+python run.py brk-sync              # Sync BRK daily data (FREE, 41 metrics)
+python run.py brk-status            # Check BRK sync status
+python run.py data-refresh          # Refresh cache from BRK (FREE)
 
-# Generate dashboard
+# ===== BITCOIN LAB SYNC (PAID - CHECK QUOTA FIRST) =====
+python run.py quota                 # Check remaining quota (1M/week)
+python run.py bl-sync-hourly        # Sync hourly data (h1, ~120 DPs)
+python run.py bl-sync-h4            # Sync 4-hourly (h4, ~30 DPs)
+python run.py bl-sync-h8            # Sync 8-hourly (h8, ~15 DPs)
+python run.py bl-sync-h12           # Sync 12-hourly (h12, ~10 DPs)
+python run.py bl-status             # Check all resolutions status
+
+# ===== QUOTA MANAGEMENT =====
+python run.py quota                 # Current quota status
+python run.py quota-estimate 30 h1  # Estimate cost for 30 days hourly
+python run.py quota-history         # Show 30-day usage history
+
+# ===== DATA STATUS & FRESHNESS =====
+python run.py data                  # Show cache freshness
+python run.py brk-status            # BRK daily status
+python run.py bl-status-hourly      # Bitcoin Lab hourly status
+
+# ===== GENERATE DASHBOARD =====
 python scripts/calculate.py         # Compute signals
 python scripts/dashboard_new.py     # Render HTML
-
-# Quick status
-python run.py brk-status            # Check BRK sync status
-python run.py quota                 # Check Bitcoin Lab quota
 ```
 
 ## Parquet Data Format
@@ -267,11 +680,25 @@ bitcoin-lab-btc-data-pipeline/
 │   ├── calculate.py             # Signal computation
 │   └── dashboard_new.py         # HTML rendering (6 pillars)
 ├── data/
-│   ├── brk/daily/               # BRK metrics (primary)
-│   ├── glassnode/daily/         # Derivatives
+│   ├── brk/daily/               # BRK metrics (FREE, 41 metrics, daily)
+│   ├── bl/                      # Bitcoin Lab (PAID, multi-resolution)
+│   │   ├── hourly/              # h1: 5 metrics, 96K rows each
+│   │   ├── h4/                  # 4-hourly: 5 metrics, 24K rows each
+│   │   ├── h8/                  # 8-hourly: 5 metrics, 12K rows each
+│   │   └── h12/                 # 12-hourly: 5 metrics, 8K rows each
+│   ├── glassnode/daily/         # Derivatives (funding, liquidations)
 │   ├── signals/                 # Computed signals
-│   └── claude.md                # Data source docs
+│   └── results/                 # Backtest results
+├── config/
+│   ├── strategies/              # Strategy JSON configs (STRAT-001 to 005)
+│   ├── bl/                      # Bitcoin Lab sync state
+│   └── brk_sync_state.json      # BRK sync state
 ├── research/
-│   └── check/Masterclass.txt    # James Check framework
-└── config/                      # Sync state files
+│   ├── check/Masterclass.txt    # James Check framework
+│   └── *.ipynb                  # Analysis notebooks (1-84+)
+└── src/                         # Source code modules
+    ├── data_loader.py           # Unified data access layer
+    ├── brk_downloader.py        # BRK API client
+    ├── downloader.py            # Bitcoin Lab API client
+    └── trading_system.py        # Strategy execution engine
 ```

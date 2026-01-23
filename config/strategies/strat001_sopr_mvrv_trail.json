@@ -1,0 +1,353 @@
+{
+  "id": "STRAT-001",
+  "name": "SOPR Double Capitulation + MVRV Trail (Original)",
+  "version": "1.0",
+  "status": "PAPER-READY",
+  "created": "2025-01-09",
+  "updated": "2025-01-23",
+  "description": "Original strategy with SOPR double capitulation entry and MVRV-triggered trailing stop. Good fallback if STRAT-002 underperforms.",
+
+  "metadata": {
+    "time_horizon": "MEDIUM-TO-LONG-TERM",
+    "trade_frequency": "2-4 trades/year",
+    "avg_hold_period_days": 180,
+    "complexity": "MEDIUM",
+    "framework": "SOPR Capitulation + MVRV Exit",
+    "research_notebooks": [
+      "research/18_mvrv_grid_search.ipynb"
+    ]
+  },
+
+  "entry": {
+    "description": "Double SOPR capitulation - Both general and short-term holders selling at loss",
+    "logic": "AND",
+    "conditions": [
+      {
+        "id": "sopr_loss_selling",
+        "metric": "sopr",
+        "operator": "<",
+        "threshold": 1.0,
+        "rationale": "Overall market selling at loss",
+        "weight": 1
+      },
+      {
+        "id": "sth_sopr_capitulation",
+        "metric": "sopr_sth",
+        "operator": "<",
+        "threshold": 1.0,
+        "rationale": "Short-term holders also selling at loss (weak hands panic)",
+        "weight": 1
+      }
+    ],
+    "timing": "first_day",
+    "timing_description": "Enter on first day when BOTH conditions are true (not continuation)",
+    "comparison_to_strat_002": {
+      "difference": "STRAT-002 adds Realized Loss Z-score filter",
+      "strat_001_simplicity": "Simpler entry (2 conditions vs 3)",
+      "strat_002_selectivity": "More selective (beat rate 67% vs 62%)"
+    }
+  },
+
+  "exit": {
+    "description": "MVRV-triggered 20% trailing stop with backup stop loss and max hold",
+    "logic": "OR",
+    "type": "triggered_trailing_stop",
+    "conditions": [
+      {
+        "id": "mvrv_trail_trigger",
+        "type": "primary_exit",
+        "trigger": {
+          "metric": "mvrv",
+          "operator": ">",
+          "threshold": 2.25,
+          "rationale": "Market expensive - activate trailing stop"
+        },
+        "action": {
+          "type": "trailing_stop",
+          "trail_pct": 0.20,
+          "description": "Trail 20% below peak once MVRV > 2.25"
+        }
+      },
+      {
+        "id": "stop_loss",
+        "type": "safety_exit",
+        "metric": "price",
+        "operator": "<",
+        "metric_compare": "entry_price",
+        "threshold_pct": -0.20,
+        "rationale": "Hard stop 20% below entry (safety net)"
+      },
+      {
+        "id": "max_hold",
+        "type": "safety_exit",
+        "metric": "days_in_trade",
+        "operator": ">",
+        "threshold": 365,
+        "rationale": "Force exit after 365 days (prevent infinite hold)"
+      }
+    ],
+    "timing": "any_day",
+    "timing_description": "Exit when MVRV trail triggers OR stop loss OR max hold",
+    "comparison_to_strat_002": {
+      "strat_001": "MVRV-triggered trail + stop loss + max hold",
+      "strat_002_v5": "Simple 30% trail only (no trigger, no stop, no time limit)",
+      "strat_002_won_by": "+2,111% (simpler beat complex)",
+      "note": "STRAT-002 proved simpler is better for long-term"
+    }
+  },
+
+  "risk_management": {
+    "position_sizing": {
+      "type": "fixed",
+      "size_pct": 1.0,
+      "description": "100% allocation per signal"
+    },
+    "stop_loss": {
+      "enabled": true,
+      "type": "hard_stop",
+      "pct": -0.20,
+      "description": "20% stop loss below entry (safety net)"
+    },
+    "max_positions": 1,
+    "max_pyramid": false,
+    "max_hold_days": 365,
+    "description": "Single position with multiple safety exits"
+  },
+
+  "data_requirements": {
+    "required_metrics": [
+      "sopr",
+      "sopr_sth",
+      "mvrv",
+      "price"
+    ],
+    "derived_metrics": [],
+    "minimum_history_days": 200,
+    "data_sources": {
+      "primary": "brk",
+      "note": "All required metrics available from 2019+"
+    },
+    "backtest_start_date": "2019-01-01"
+  },
+
+  "performance": {
+    "backtest": {
+      "period": "2019-01-01 to 2025-01-09",
+      "beat_rate_pct": 62,
+      "robustness": {
+        "configs_tested": 35,
+        "configs_beat_baseline": 32,
+        "robustness_pct": 91,
+        "description": "32 of 35 parameter combinations beat buy-and-hold"
+      },
+      "best_config": {
+        "mvrv_trigger": 2.25,
+        "trail_pct": 0.20,
+        "stop_loss_pct": -0.20,
+        "max_hold_days": 365
+      },
+      "alternative_configs": {
+        "aggressive": {
+          "mvrv_trigger": 2.75,
+          "trail_pct": 0.30,
+          "note": "Best on average in grid search"
+        }
+      }
+    },
+    "comparison": {
+      "vs_strat_002_v5": {
+        "strat_001_beat_rate": "62%",
+        "strat_002_beat_rate": "67%",
+        "strat_001_robustness": "91% (32/35 configs)",
+        "strat_002_robustness": "N/A (single config)",
+        "strat_001_complexity": "Medium (4 exit conditions)",
+        "strat_002_complexity": "Simple (1 exit condition)",
+        "conclusion": "STRAT-002 wins on performance, STRAT-001 wins on robustness"
+      },
+      "use_case": "Good fallback if STRAT-002 underperforms in paper trading"
+    }
+  },
+
+  "trading_modes": {
+    "backtest": {
+      "enabled": true,
+      "start_date": "2019-01-01",
+      "end_date": "latest",
+      "initial_capital": 10000,
+      "commission_pct": 0.1,
+      "slippage_pct": 0.05
+    },
+    "forward_test": {
+      "enabled": true,
+      "description": "Recommended for validation",
+      "lookback_days": 730
+    },
+    "paper_trading": {
+      "enabled": true,
+      "description": "Good backup strategy for paper testing",
+      "exchange": "coinbase",
+      "symbol": "BTC-USD",
+      "initial_capital": 10000,
+      "update_frequency_seconds": 3600,
+      "alert_on_signal": true,
+      "alert_channels": ["email", "telegram"],
+      "dry_run": true
+    },
+    "live_trading": {
+      "enabled": false,
+      "exchange": "coinbase",
+      "symbol": "BTC-USD",
+      "api_key_env": "COINBASE_API_KEY",
+      "api_secret_env": "COINBASE_API_SECRET",
+      "max_position_size_usd": 50000,
+      "require_manual_confirmation": true,
+      "safety_checks": {
+        "max_drawdown_stop_pct": 50,
+        "daily_loss_limit_pct": 10,
+        "check_data_freshness": true,
+        "max_data_staleness_minutes": 120
+      }
+    }
+  },
+
+  "monitoring": {
+    "metrics_to_track": [
+      "current_position",
+      "unrealized_pnl_pct",
+      "days_in_trade",
+      "mvrv_current",
+      "trail_active",
+      "trail_distance_pct",
+      "entry_conditions_status"
+    ],
+    "alerts": [
+      {
+        "trigger": "entry_signal",
+        "severity": "HIGH",
+        "message": "STRAT-001 Entry: SOPR + STH-SOPR both < 1.0",
+        "include": ["price", "sopr", "sth_sopr"]
+      },
+      {
+        "trigger": "mvrv_trigger_activated",
+        "severity": "MEDIUM",
+        "message": "STRAT-001: MVRV > 2.25 - Trailing stop now active",
+        "include": ["mvrv", "peak_price"]
+      },
+      {
+        "trigger": "exit_signal",
+        "severity": "HIGH",
+        "message": "STRAT-001 Exit: Trail/Stop/MaxHold triggered",
+        "include": ["exit_reason", "pnl_pct", "hold_days"]
+      },
+      {
+        "trigger": "approaching_stop",
+        "condition": "price within 5% of any stop",
+        "severity": "LOW",
+        "message": "STRAT-001: Price approaching stop condition"
+      }
+    ],
+    "daily_report": {
+      "enabled": true,
+      "include_condition_status": true,
+      "include_mvrv_status": true,
+      "include_trail_status": true
+    }
+  },
+
+  "parameters": {
+    "tunable": {
+      "mvrv_trigger": {
+        "current": 2.25,
+        "tested_range": [2.0, 3.0],
+        "optimal_single": 2.25,
+        "optimal_average": 2.75,
+        "description": "MVRV threshold to activate trailing stop",
+        "note": "2.25 best for single config, 2.75 best on average"
+      },
+      "trail_pct": {
+        "current": 0.20,
+        "tested_range": [0.15, 0.30],
+        "optimal_single": 0.20,
+        "optimal_average": 0.30,
+        "description": "Trailing stop percentage once MVRV trigger fires"
+      },
+      "stop_loss_pct": {
+        "current": -0.20,
+        "tested_range": [-0.15, -0.25],
+        "optimal": -0.20,
+        "description": "Hard stop loss below entry"
+      },
+      "max_hold_days": {
+        "current": 365,
+        "tested_range": [180, 730],
+        "optimal": 365,
+        "description": "Maximum hold period before forced exit"
+      }
+    },
+    "fixed": {
+      "sopr_threshold": 1.0,
+      "sth_sopr_threshold": 1.0
+    }
+  },
+
+  "implementation": {
+    "calculation_frequency": "daily",
+    "execution_time": "00:00 UTC",
+    "data_lag_acceptable_hours": 24,
+    "signal_calculation": {
+      "language": "python",
+      "framework": "pandas",
+      "entry_code_reference": "research/18_mvrv_grid_search.ipynb",
+      "exit_code_reference": "research/18_mvrv_grid_search.ipynb"
+    }
+  },
+
+  "notes": {
+    "strengths": [
+      "Very high robustness: 91% of configs beat baseline (32/35)",
+      "Simpler entry than STRAT-002 (2 conditions vs 3)",
+      "Multiple safety exits (stop loss + max hold)",
+      "Well-tested with grid search (35 combinations)",
+      "Good fallback strategy"
+    ],
+    "limitations": [
+      "Lower beat rate than STRAT-002 (62% vs 67%)",
+      "More complex exit than STRAT-002 v5 (4 conditions vs 1)",
+      "MVRV trigger adds complexity without improving performance",
+      "Stop loss and max hold can cause edge case losses",
+      "STRAT-002 v5 proved simpler is better (+2,111% improvement)"
+    ],
+    "usage_guidelines": [
+      "Use as backup if STRAT-002 underperforms",
+      "Consider testing both 2.25 and 2.75 MVRV thresholds",
+      "Monitor MVRV trigger activation carefully",
+      "Good for comparing against STRAT-002 in paper trading"
+    ],
+    "key_learnings": [
+      "Higher robustness (91%) than selectivity",
+      "Regime filter tested and rejected (not needed for contrarian signals)",
+      "STRAT-002 evolution showed simpler is better",
+      "MVRV trigger doesn't improve performance vs simple trail",
+      "Original strategy - kept for historical comparison"
+    ],
+    "relationship_to_other_strategies": {
+      "vs_strat_002": "STRAT-002 is evolved version with simpler exit and better performance",
+      "use_case": "Fallback strategy with high robustness",
+      "testing_value": "Good for A/B testing against STRAT-002"
+    }
+  },
+
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2025-01-09",
+      "changes": [
+        "Initial version with grid search optimization",
+        "SOPR + STH-SOPR entry",
+        "MVRV > 2.25 triggered 20% trail",
+        "20% stop loss + 365d max hold",
+        "62% beat rate, 91% robustness"
+      ]
+    }
+  ]
+}

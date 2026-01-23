@@ -1,0 +1,448 @@
+{
+  "id": "STRAT-003",
+  "name": "Short-Term Active Trading",
+  "version": "3.0",
+  "status": "VALIDATED-PAPER-READY",
+  "created": "2025-01-11",
+  "updated": "2025-01-23",
+  "description": "Active trading strategy with LTH-SOPR exit trigger and Checkmate position sizing. Trades 9-15x/year with ~29 day holds.",
+
+  "metadata": {
+    "time_horizon": "SHORT-TERM",
+    "trade_frequency": "9-15 trades/year",
+    "avg_hold_period_days": 29,
+    "complexity": "MEDIUM",
+    "framework": "Weak hands entry + Smart money exit + Dynamic sizing",
+    "research_notebooks": [
+      "research/40_sth_sopr_only.ipynb",
+      "research/43_adaptive_trail_strategy.ipynb",
+      "research/44_realized_profit_exit.ipynb",
+      "research/46_lth_sopr_exit.ipynb",
+      "research/68_checkmate_with_our_strategies.ipynb",
+      "research/69_strat003_checkmate_sizing.ipynb"
+    ]
+  },
+
+  "entry": {
+    "description": "STH-SOPR capitulation with Checkmate position sizing",
+    "logic": "SIMPLE",
+    "conditions": [
+      {
+        "id": "sth_sopr_capitulation",
+        "metric": "sopr_sth",
+        "operator": "<",
+        "threshold": 1.0,
+        "rationale": "Short-term holders selling at loss (weak hands capitulating)",
+        "weight": 1
+      }
+    ],
+    "timing": "first_day",
+    "timing_description": "Enter on first day STH-SOPR < 1.0",
+    "position_sizing": {
+      "type": "dynamic",
+      "method": "checkmate_composite",
+      "description": "Size position based on Checkmate composite signal strength",
+      "tiers": [
+        {
+          "signal_max": -1.0,
+          "size_pct": 1.0,
+          "description": "Very bullish - full allocation"
+        },
+        {
+          "signal_max": -0.5,
+          "size_pct": 0.8,
+          "description": "Bullish - 80% allocation"
+        },
+        {
+          "signal_max": 0.0,
+          "size_pct": 0.6,
+          "description": "Neutral bullish - 60% allocation"
+        },
+        {
+          "signal_max": 0.5,
+          "size_pct": 0.4,
+          "description": "Weak - 40% allocation"
+        },
+        {
+          "signal_max": 999,
+          "size_pct": 0.25,
+          "description": "Bearish - minimum 25% allocation"
+        }
+      ],
+      "impact": "Improves Sharpe by +15.7% vs fixed sizing"
+    }
+  },
+
+  "exit": {
+    "description": "Adaptive trailing stop with LTH-SOPR trigger - Tightens when smart money distributes",
+    "logic": "ADAPTIVE",
+    "type": "adaptive_trailing_stop",
+    "initial_trail_pct": 0.30,
+    "triggered_trail_pct": 0.15,
+    "trigger": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "id": "mvrv_expensive",
+          "metric": "mvrv",
+          "operator": ">",
+          "threshold": 2.5,
+          "rationale": "Market is expensive relative to realized price"
+        },
+        {
+          "id": "lth_sopr_distribution",
+          "metric": "sopr_lth",
+          "operator": ">",
+          "threshold": 1.5,
+          "rationale": "Long-term holders taking significant profits (smart money exiting)"
+        }
+      ],
+      "description": "When BOTH MVRV>2.5 AND LTH-SOPR>1.5, tighten trail from 30% to 15%"
+    },
+    "timing": "any_day",
+    "timing_description": "Trail active immediately at 30%, tightens to 15% when trigger fires",
+    "innovation": "LTH-SOPR is 5x stronger signal than STH-SOPR at tops (~5.0 vs ~1.03)"
+  },
+
+  "checkmate_composite": {
+    "description": "James Check's 6-metric composite for market regime scoring",
+    "score_range": {
+      "min": -2.0,
+      "max": 2.0,
+      "interpretation": "Negative = bullish, Positive = bearish"
+    },
+    "metrics": [
+      {
+        "metric": "mvrv",
+        "weight": 0.30,
+        "bullish_threshold": 1.0,
+        "bearish_threshold": 2.4,
+        "description": "Market value vs realized value"
+      },
+      {
+        "metric": "mvrv_sth",
+        "weight": 0.15,
+        "bullish_threshold": 1.0,
+        "bearish_threshold": 1.4,
+        "description": "Short-term holder profitability"
+      },
+      {
+        "metric": "mvrv_lth",
+        "weight": 0.15,
+        "bullish_threshold": 1.5,
+        "bearish_threshold": 3.5,
+        "description": "Long-term holder profitability"
+      },
+      {
+        "metric": "nupl",
+        "weight": 0.20,
+        "bullish_threshold": 0.25,
+        "bearish_threshold": 0.6,
+        "description": "Net unrealized profit/loss"
+      },
+      {
+        "metric": "sopr",
+        "weight": 0.10,
+        "bullish_threshold": 1.0,
+        "bearish_threshold": 1.05,
+        "description": "Spent output profit ratio"
+      },
+      {
+        "metric": "aviv",
+        "weight": 0.10,
+        "bullish_threshold": 1.0,
+        "bearish_threshold": 1.5,
+        "description": "Active investor vs investor value"
+      }
+    ],
+    "calculation": "Linear interpolation between bullish/bearish thresholds, weighted sum"
+  },
+
+  "risk_management": {
+    "position_sizing": {
+      "type": "dynamic",
+      "method": "checkmate_composite",
+      "min_size_pct": 0.25,
+      "max_size_pct": 1.0,
+      "description": "25-100% allocation based on market regime"
+    },
+    "stop_loss": {
+      "enabled": false,
+      "description": "Trailing stop handles all exits"
+    },
+    "max_positions": 1,
+    "max_pyramid": false,
+    "description": "Single position with dynamic sizing based on Checkmate signal"
+  },
+
+  "data_requirements": {
+    "required_metrics": [
+      "sopr_sth",
+      "sopr_lth",
+      "mvrv",
+      "mvrv_sth",
+      "mvrv_lth",
+      "nupl",
+      "sopr",
+      "aviv",
+      "price"
+    ],
+    "derived_metrics": [
+      "checkmate_composite"
+    ],
+    "minimum_history_days": 365,
+    "data_sources": {
+      "primary": "brk",
+      "note": "All required metrics available from 2019+"
+    },
+    "backtest_start_date": "2019-01-01"
+  },
+
+  "performance": {
+    "backtest": {
+      "period": "2019-01-01 to 2026-01-22",
+      "period_description": "Full cycle including COVID crash, bull runs, and bear markets",
+      "v3_checkmate_sizing": {
+        "total_return_pct": 5973,
+        "sharpe_ratio": 1.22,
+        "sharpe_improvement_vs_baseline": 15.7,
+        "max_drawdown_pct": -50.0,
+        "win_rate_pct": 50.0,
+        "total_trades": 15,
+        "avg_hold_days": 29
+      },
+      "v2_lth_sopr_exit_no_sizing": {
+        "total_return_pct": 6785,
+        "sharpe_ratio": 1.05,
+        "max_drawdown_pct": -55.0,
+        "win_rate_pct": 50.0,
+        "total_trades": 15
+      },
+      "v1_simple_trail": {
+        "total_return_pct": 2970,
+        "trailing_stop_pct": 8,
+        "description": "Tight 8% trail"
+      },
+      "benchmark_return_pct": 2268,
+      "note": "v3 optimizes for Sharpe (risk-adjusted returns), v2 optimizes for absolute returns"
+    },
+    "validation": {
+      "lth_sopr_innovation": {
+        "improvement_vs_simple": "+28%",
+        "lth_sopr_at_tops": "~5.0",
+        "sth_sopr_at_tops": "~1.03",
+        "signal_strength_ratio": "5x stronger",
+        "description": "LTH-SOPR captures smart money distribution better than STH-SOPR"
+      },
+      "checkmate_sizing_impact": {
+        "sharpe_improvement": "+15.7%",
+        "return_trade_off": "-812% absolute return vs v2",
+        "max_dd_improvement": "+5%",
+        "use_case": "Better risk-adjusted returns for position sizing"
+      }
+    }
+  },
+
+  "trading_modes": {
+    "backtest": {
+      "enabled": true,
+      "start_date": "2019-01-01",
+      "end_date": "latest",
+      "initial_capital": 10000,
+      "commission_pct": 0.1,
+      "slippage_pct": 0.05
+    },
+    "forward_test": {
+      "enabled": true,
+      "description": "Recommended for validation before live",
+      "lookback_days": 730,
+      "rebalance_days": 1
+    },
+    "paper_trading": {
+      "enabled": true,
+      "description": "PERFECT for paper trading - active enough to test execution",
+      "exchange": "coinbase",
+      "symbol": "BTC-USD",
+      "initial_capital": 10000,
+      "update_frequency_seconds": 3600,
+      "alert_on_signal": true,
+      "alert_channels": ["email", "telegram"],
+      "dry_run": true
+    },
+    "live_trading": {
+      "enabled": false,
+      "exchange": "coinbase",
+      "symbol": "BTC-USD",
+      "api_key_env": "COINBASE_API_KEY",
+      "api_secret_env": "COINBASE_API_SECRET",
+      "max_position_size_usd": 50000,
+      "require_manual_confirmation": true,
+      "safety_checks": {
+        "max_drawdown_stop_pct": 60,
+        "daily_loss_limit_pct": 15,
+        "check_data_freshness": true,
+        "max_data_staleness_minutes": 120
+      }
+    }
+  },
+
+  "monitoring": {
+    "metrics_to_track": [
+      "current_position",
+      "position_size_pct",
+      "checkmate_signal",
+      "unrealized_pnl_pct",
+      "days_in_trade",
+      "trail_type",
+      "trail_distance_pct",
+      "lth_sopr_current",
+      "mvrv_current"
+    ],
+    "alerts": [
+      {
+        "trigger": "entry_signal",
+        "severity": "HIGH",
+        "message": "STRAT-003 Entry: STH-SOPR < 1.0 (weak hands capitulating)",
+        "include": ["checkmate_signal", "suggested_position_size"]
+      },
+      {
+        "trigger": "exit_signal",
+        "severity": "HIGH",
+        "message": "STRAT-003 Exit: Trailing stop triggered",
+        "include": ["trail_type", "pnl_pct"]
+      },
+      {
+        "trigger": "trail_tightened",
+        "condition": "MVRV>2.5 AND LTH-SOPR>1.5",
+        "severity": "MEDIUM",
+        "message": "STRAT-003: Trail tightened to 15% (smart money distributing)"
+      },
+      {
+        "trigger": "checkmate_regime_change",
+        "condition": "checkmate_signal crosses major threshold",
+        "severity": "LOW",
+        "message": "STRAT-003: Market regime shifted (Checkmate signal changed)"
+      }
+    ],
+    "daily_report": {
+      "enabled": true,
+      "include_condition_status": true,
+      "include_checkmate_signal": true,
+      "include_position_status": true,
+      "include_trail_status": true
+    }
+  },
+
+  "parameters": {
+    "tunable": {
+      "initial_trail_pct": {
+        "current": 0.30,
+        "tested_range": [0.20, 0.40],
+        "optimal": 0.30,
+        "description": "Initial trailing stop percentage"
+      },
+      "triggered_trail_pct": {
+        "current": 0.15,
+        "tested_range": [0.10, 0.20],
+        "optimal": 0.15,
+        "description": "Tightened trail after LTH-SOPR trigger"
+      },
+      "lth_sopr_threshold": {
+        "current": 1.5,
+        "tested_range": [1.3, 1.7],
+        "optimal": 1.5,
+        "description": "LTH-SOPR threshold for smart money distribution"
+      },
+      "mvrv_trigger": {
+        "current": 2.5,
+        "tested_range": [2.0, 3.0],
+        "optimal": 2.5,
+        "description": "MVRV threshold for expensive market condition"
+      }
+    },
+    "fixed": {
+      "sth_sopr_entry_threshold": 1.0
+    }
+  },
+
+  "implementation": {
+    "calculation_frequency": "daily",
+    "execution_time": "00:00 UTC",
+    "data_lag_acceptable_hours": 24,
+    "signal_calculation": {
+      "language": "python",
+      "framework": "vectorbt",
+      "entry_code_reference": "research/40_sth_sopr_only.ipynb",
+      "exit_code_reference": "research/46_lth_sopr_exit.ipynb",
+      "sizing_code_reference": "research/69_strat003_checkmate_sizing.ipynb"
+    }
+  },
+
+  "notes": {
+    "strengths": [
+      "Perfect for paper trading - 9-15 trades/year is ideal frequency",
+      "LTH-SOPR is 5x stronger signal than STH-SOPR at tops",
+      "Checkmate sizing improves Sharpe by +15.7%",
+      "Short hold periods (~29 days) allow rapid iteration",
+      "50% win rate with excellent profit factor",
+      "Works in both bull and bear markets"
+    ],
+    "limitations": [
+      "More trades = more commission and slippage costs",
+      "50% win rate means half your trades will lose",
+      "Requires active monitoring (not deploy-and-forget)",
+      "Checkmate sizing requires 6 additional metrics",
+      "Performance sensitive to execution timing"
+    ],
+    "usage_guidelines": [
+      "RECOMMENDED for paper trading first",
+      "Monitor daily during active positions",
+      "Use Checkmate sizing to reduce risk in uncertain regimes",
+      "Don't override the trail stop - trust the system",
+      "LTH-SOPR > 1.5 is rare but powerful signal"
+    ],
+    "key_learnings": [
+      "LTH-SOPR beats STH-SOPR for exits (+28% improvement)",
+      "Checkmate sizing improves Sharpe but reduces absolute returns",
+      "v2 (no sizing) for max returns: +6,785%",
+      "v3 (with sizing) for max Sharpe: +5,973% but 1.22 Sharpe",
+      "Choose version based on risk tolerance"
+    ],
+    "version_recommendations": {
+      "v2_no_sizing": "Use for maximum absolute returns, can handle higher risk",
+      "v3_checkmate_sizing": "Use for better risk-adjusted returns, more conservative"
+    }
+  },
+
+  "changelog": [
+    {
+      "version": "3.0",
+      "date": "2025-01-17",
+      "changes": [
+        "Added Checkmate composite position sizing",
+        "Improved Sharpe by +15.7% vs v2",
+        "Trade-off: -812% absolute return vs v2",
+        "Result: +5,973% return, 1.22 Sharpe"
+      ]
+    },
+    {
+      "version": "2.0",
+      "date": "2025-01-11",
+      "changes": [
+        "Added LTH-SOPR exit trigger",
+        "Tighten trail from 30% to 15% when MVRV>2.5 AND LTH-SOPR>1.5",
+        "+28% improvement over simple trail",
+        "Result: +6,785% return (no position sizing)"
+      ]
+    },
+    {
+      "version": "1.0",
+      "date": "2025-01-11",
+      "changes": [
+        "Initial version with STH-SOPR entry",
+        "Simple 8% trailing stop",
+        "Result: +2,970% return"
+      ]
+    }
+  ]
+}
