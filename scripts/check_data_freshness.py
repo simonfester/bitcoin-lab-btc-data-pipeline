@@ -19,21 +19,33 @@ import json
 DATA_DIR = Path(__file__).parent.parent / 'data'
 
 
-def get_file_freshness(file_path: Path) -> dict:
-    """Get freshness info for a parquet file"""
+def get_file_freshness(file_path: Path, expected_freq='1D') -> dict:
+    """Get freshness info for a parquet file with resolution-aware thresholds"""
     try:
         df = pd.read_parquet(file_path)
 
-        if 'time' not in df.columns or len(df) == 0:
+        if len(df) == 0:
             return {
                 'status': 'error',
-                'message': 'No time column or empty file',
+                'message': 'Empty file',
                 'last_timestamp': None,
                 'age_hours': None,
                 'rows': 0
             }
 
-        last_timestamp = df['time'].max()
+        # Handle both time as column and time as index
+        if 'time' in df.columns:
+            last_timestamp = df['time'].max()
+        elif df.index.name == 'time' or isinstance(df.index, pd.DatetimeIndex):
+            last_timestamp = df.index.max()
+        else:
+            return {
+                'status': 'error',
+                'message': 'No time column or datetime index',
+                'last_timestamp': None,
+                'age_hours': None,
+                'rows': 0
+            }
         now = pd.Timestamp.now(tz='UTC')
 
         # Make sure last_timestamp is timezone-aware
@@ -43,15 +55,25 @@ def get_file_freshness(file_path: Path) -> dict:
         age = now - last_timestamp
         age_hours = age.total_seconds() / 3600
 
-        # Determine status based on age
-        if age_hours < 24:
+        # Resolution-aware freshness thresholds
+        # Fresh = within expected interval + 1 period buffer
+        # Stale = older than fresh threshold (hasn't updated on schedule)
+
+        thresholds = {
+            '1H': 2,      # Hourly: fresh if ≤ 2h (1h + 1h buffer)
+            '4H': 5,      # 4-hourly: fresh if ≤ 5h (4h + 1h buffer)
+            '8H': 9,      # 8-hourly: fresh if ≤ 9h (8h + 1h buffer)
+            '12H': 13,    # 12-hourly: fresh if ≤ 13h (12h + 1h buffer)
+            '1D': 26,     # Daily: fresh if ≤ 26h (24h + 2h buffer)
+        }
+
+        fresh_threshold = thresholds.get(expected_freq, thresholds['1D'])
+
+        # Simple binary: fresh or stale
+        if age_hours <= fresh_threshold:
             status = 'fresh'
-        elif age_hours < 48:
-            status = 'acceptable'
-        elif age_hours < 168:  # 1 week
-            status = 'stale'
         else:
-            status = 'very_stale'
+            status = 'stale'
 
         return {
             'status': status,
@@ -59,7 +81,8 @@ def get_file_freshness(file_path: Path) -> dict:
             'age_hours': round(age_hours, 1),
             'age_days': round(age_hours / 24, 1),
             'rows': len(df),
-            'message': f"{round(age_hours, 1)}h ago"
+            'message': f"{round(age_hours, 1)}h ago",
+            'expected_freq': expected_freq
         }
 
     except Exception as e:
@@ -101,7 +124,7 @@ def check_brk_freshness() -> dict:
     for metric in key_metrics:
         file = brk_dir / f'{metric}.parquet'
         if file.exists():
-            metrics_info[metric] = get_file_freshness(file)
+            metrics_info[metric] = get_file_freshness(file, expected_freq='1D')
 
     # Get overall status (use price as representative)
     if 'price' in metrics_info:
@@ -134,7 +157,15 @@ def check_bl_freshness(resolution='hourly') -> dict:
         'h12': 'h12'
     }
 
+    freq_map = {
+        'hourly': '1H',
+        'h4': '4H',
+        'h8': '8H',
+        'h12': '12H'
+    }
+
     res_dir = resolution_map.get(resolution, resolution)
+    expected_freq = freq_map.get(res_dir, '1H')
     bl_dir = DATA_DIR / 'bl' / res_dir
 
     if not bl_dir.exists():
@@ -157,12 +188,12 @@ def check_bl_freshness(resolution='hourly') -> dict:
             'metrics': {}
         }
 
-    # Check all metrics (usually just 5)
+    # Check all metrics (usually just 5) with resolution-aware thresholds
     metrics_info = {}
 
     for file in files:
         metric = file.stem
-        metrics_info[metric] = get_file_freshness(file)
+        metrics_info[metric] = get_file_freshness(file, expected_freq=expected_freq)
 
     # Get overall status (use price as representative)
     if 'price' in metrics_info:
@@ -179,6 +210,66 @@ def check_bl_freshness(resolution='hourly') -> dict:
     return {
         'source': 'Bitcoin Lab',
         'resolution': resolution,
+        'status': overall_status,
+        'last_update': last_update,
+        'age_hours': overall_age,
+        'total_files': len(files),
+        'metrics': metrics_info
+    }
+
+
+def check_glassnode_freshness() -> dict:
+    """Check Glassnode data freshness"""
+    gn_dir = DATA_DIR / 'glassnode' / 'daily'
+
+    if not gn_dir.exists():
+        return {
+            'source': 'Glassnode',
+            'resolution': 'daily',
+            'status': 'missing',
+            'message': 'Directory not found',
+            'metrics': {}
+        }
+
+    files = list(gn_dir.glob('*.parquet'))
+
+    if not files:
+        return {
+            'source': 'Glassnode',
+            'resolution': 'daily',
+            'status': 'empty',
+            'message': 'No data files found',
+            'metrics': {}
+        }
+
+    # Check derivatives metrics
+    key_metrics = ['funding_rate', 'liquidations_long', 'liquidations_short', 'open_interest']
+    metrics_info = {}
+
+    for metric in key_metrics:
+        file = gn_dir / f'{metric}.parquet'
+        if file.exists():
+            metrics_info[metric] = get_file_freshness(file, expected_freq='1D')
+
+    # Get overall status (use funding_rate as representative)
+    if 'funding_rate' in metrics_info:
+        overall_status = metrics_info['funding_rate']['status']
+        overall_age = metrics_info['funding_rate']['age_hours']
+        last_update = metrics_info['funding_rate']['last_timestamp']
+    elif metrics_info:
+        # Use first available metric
+        first_metric = list(metrics_info.keys())[0]
+        overall_status = metrics_info[first_metric]['status']
+        overall_age = metrics_info[first_metric]['age_hours']
+        last_update = metrics_info[first_metric]['last_timestamp']
+    else:
+        overall_status = 'unknown'
+        overall_age = None
+        last_update = None
+
+    return {
+        'source': 'Glassnode',
+        'resolution': 'daily',
         'status': overall_status,
         'last_update': last_update,
         'age_hours': overall_age,
@@ -210,9 +301,7 @@ def print_freshness_report(results: list, as_json: bool = False):
         # Status icons
         status_icon = {
             'fresh': '✅',
-            'acceptable': '🟡',
-            'stale': '🟠',
-            'very_stale': '🔴',
+            'stale': '🔴',
             'missing': '❌',
             'empty': '❌',
             'error': '⚠️',
@@ -239,31 +328,44 @@ def print_freshness_report(results: list, as_json: bool = False):
     print("=" * 80)
 
     fresh_count = sum(1 for r in results if r.get('status') == 'fresh')
-    stale_count = sum(1 for r in results if r.get('status') in ['stale', 'very_stale'])
+    stale_count = sum(1 for r in results if r.get('status') == 'stale')
     missing_count = sum(1 for r in results if r.get('status') in ['missing', 'empty'])
+    error_count = sum(1 for r in results if r.get('status') == 'error')
 
     total = len(results)
 
-    print(f"Fresh (<24h):     {fresh_count}/{total}")
-    print(f"Stale (>48h):     {stale_count}/{total}")
-    print(f"Missing/Empty:    {missing_count}/{total}")
+    print(f"✅ Fresh:         {fresh_count}/{total}")
+    print(f"🔴 Stale:         {stale_count}/{total}")
+    print(f"❌ Missing/Empty: {missing_count}/{total}")
+    if error_count > 0:
+        print(f"⚠️  Errors:        {error_count}/{total}")
+
+    print("\nFreshness Thresholds (resolution-aware):")
+    print("  Hourly (h1):   Fresh if ≤ 2h  (1h interval + 1h buffer)")
+    print("  4-hourly (h4): Fresh if ≤ 5h  (4h interval + 1h buffer)")
+    print("  8-hourly (h8): Fresh if ≤ 9h  (8h interval + 1h buffer)")
+    print("  12-hourly:     Fresh if ≤ 13h (12h interval + 1h buffer)")
+    print("  Daily:         Fresh if ≤ 26h (24h interval + 2h buffer)")
 
     if fresh_count == total:
         print("\n✅ All data sources are FRESH")
     elif stale_count > 0:
-        print("\n⚠️  Some data sources are STALE - consider running sync")
+        print("\n🔴 Some data sources are STALE - run sync immediately")
 
     if missing_count > 0:
         print("\n❌ Some data sources are MISSING - run initial sync")
 
     print("\nRECOMMENDED ACTIONS:")
 
+    actions_needed = False
+
     for result in results:
         status = result.get('status')
         source = result.get('source')
         resolution = result.get('resolution', '')
 
-        if status == 'stale' or status == 'very_stale':
+        if status == 'stale':
+            actions_needed = True
             if source == 'BRK':
                 print(f"  • Run: python run.py brk-sync")
             elif source == 'Bitcoin Lab':
@@ -271,12 +373,20 @@ def print_freshness_report(results: list, as_json: bool = False):
                     print(f"  • Run: python run.py bl-sync-hourly")
                 else:
                     print(f"  • Run: python run.py bl-sync-{resolution}")
+            elif source == 'Glassnode':
+                print(f"  • Run: python run.py gn-sync  (or manual Glassnode sync)")
 
-        if status == 'missing' or status == 'empty':
+        if status in ['missing', 'empty']:
+            actions_needed = True
             if source == 'BRK':
                 print(f"  • Run: python run.py brk-backfill")
             elif source == 'Bitcoin Lab':
                 print(f"  • Run: python run.py bl-backfill-{resolution}")
+            elif source == 'Glassnode':
+                print(f"  • Run: python run.py gn-backfill  (or manual Glassnode sync)")
+
+    if not actions_needed:
+        print("  None - all data is fresh!")
 
 
 def main():
@@ -284,7 +394,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description='Check data freshness')
-    parser.add_argument('--source', choices=['brk', 'bl', 'all'], default='all',
+    parser.add_argument('--source', choices=['brk', 'bl', 'gn', 'all'], default='all',
                        help='Data source to check (default: all)')
     parser.add_argument('--resolution', choices=['hourly', 'h4', 'h8', 'h12', 'all'],
                        default='all', help='Bitcoin Lab resolution (default: all)')
@@ -307,11 +417,15 @@ def main():
         else:
             results.append(check_bl_freshness(args.resolution))
 
+    # Check Glassnode
+    if args.source in ['gn', 'all']:
+        results.append(check_glassnode_freshness())
+
     print_freshness_report(results, as_json=args.json)
 
     # Exit with error code if any stale or missing
     stale_or_missing = sum(1 for r in results
-                          if r.get('status') in ['stale', 'very_stale', 'missing', 'empty'])
+                          if r.get('status') in ['stale', 'missing', 'empty'])
 
     sys.exit(1 if stale_or_missing > 0 else 0)
 

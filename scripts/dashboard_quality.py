@@ -121,9 +121,7 @@ def generate_freshness_html(freshness_results):
         # Icon based on status
         status_icons = {
             'fresh': '✅',
-            'acceptable': '🟡',
-            'stale': '🟠',
-            'very_stale': '🔴',
+            'stale': '🔴',
             'missing': '❌',
             'empty': '❌',
             'error': '⚠️',
@@ -448,16 +446,16 @@ def generate_html(quality_results, freshness_results):
             border-left: 4px solid #28a745;
         }}
 
-        .freshness-card.acceptable {{
-            border-left: 4px solid #ffc107;
-        }}
-
         .freshness-card.stale {{
-            border-left: 4px solid #fd7e14;
+            border-left: 4px solid #dc3545;
         }}
 
-        .freshness-card.very_stale {{
-            border-left: 4px solid #dc3545;
+        .freshness-card.missing {{
+            border-left: 4px solid #6c757d;
+        }}
+
+        .freshness-card.error {{
+            border-left: 4px solid #fd7e14;
         }}
 
         .freshness-card h4 {{
@@ -480,18 +478,18 @@ def generate_html(quality_results, freshness_results):
             color: white;
         }}
 
-        .freshness-card .status.acceptable {{
-            background: #ffc107;
-            color: #1a1a1a;
-        }}
-
         .freshness-card .status.stale {{
-            background: #fd7e14;
+            background: #dc3545;
             color: white;
         }}
 
-        .freshness-card .status.very_stale {{
-            background: #dc3545;
+        .freshness-card .status.missing {{
+            background: #6c757d;
+            color: white;
+        }}
+
+        .freshness-card .status.error {{
+            background: #fd7e14;
             color: white;
         }}
 
