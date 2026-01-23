@@ -884,6 +884,25 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
             color: #6b7280;
             font-size: 0.85em;
         }}
+        .header .nav {{
+            margin-top: 12px;
+        }}
+        .header .nav a {{
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 0 8px;
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+            text-decoration: none;
+            border-radius: 6px;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            font-size: 0.85em;
+            transition: all 0.3s ease;
+        }}
+        .header .nav a:hover {{
+            background: rgba(245, 158, 11, 0.2);
+            transform: translateY(-2px);
+        }}
         .container {{
             max-width: 1600px;
             margin: 0 auto;
@@ -967,6 +986,9 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
         <div class="meta">
             Data as of: {data_time} | Calculated: {calc_time}
             {' | Live price enabled' if live_price else ''}
+        </div>
+        <div class="nav">
+            <a href="dashboard_quality.html">📊 Data Quality</a>
         </div>
     </div>
     
