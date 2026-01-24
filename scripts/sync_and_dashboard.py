@@ -192,6 +192,16 @@ def generate_dashboards(open_browser: bool = True):
     else:
         print("⚠️  Signals dashboard script not found - SKIPPING")
 
+    # Generate quality dashboard
+    quality_script = PROJECT_ROOT / "scripts" / "dashboard_quality.py"
+    if quality_script.exists():
+        cmd = ["python", str(quality_script)]
+        if not open_browser:
+            cmd.append("--no-open")
+        run_command(cmd, "Generating quality dashboard", critical=False)
+    else:
+        print("⚠️  Quality dashboard script not found - SKIPPING")
+
 
 def main():
     """Main execution."""
@@ -267,12 +277,14 @@ Examples:
     print("\n 📊 Dashboards generated:")
     print("    • dashboard.html          - Main 6-pillar dashboard")
     print("    • dashboard_signals.html  - Trading signals dashboard")
+    print("    • dashboard_quality.html  - Data quality report")
 
     if not args.no_open:
         print("\n 🌐 Dashboards opened in browser")
 
     print("\n 💡 Next steps:")
     print("    • Review signals on dashboard_signals.html")
+    print("    • Check quality on dashboard_quality.html")
     print("    • Refresh data: python scripts/sync_and_dashboard.py")
     print("    • Quick update: python scripts/sync_and_dashboard.py --skip-sync")
     print("=" * 80)

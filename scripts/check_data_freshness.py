@@ -294,49 +294,112 @@ def print_freshness_report(results: list, as_json: bool = False):
     print(f"Scan Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
 
+    # Categorize results by importance
+    critical_sources = []  # Daily data used for signals
+    non_critical_sources = []  # Hourly data (optional)
+
     for result in results:
-        source = result.get('source')
         resolution = result.get('resolution', '')
-        status = result.get('status')
-        last_update = result.get('last_update', 'Unknown')
-        age_hours = result.get('age_hours')
+        if resolution == 'daily':
+            critical_sources.append(result)
+        else:
+            non_critical_sources.append(result)
 
-        # Status icons
-        status_icon = {
-            'fresh': '✅',
-            'stale': '🔴',
-            'missing': '❌',
-            'empty': '❌',
-            'error': '⚠️',
-            'unknown': '❓'
-        }.get(status, '❓')
+    # Show critical sources first
+    if critical_sources:
+        print("CRITICAL DATA (Used for Daily Signals):")
+        print("-" * 80)
+        for result in critical_sources:
+            source = result.get('source')
+            resolution = result.get('resolution', '')
+            status = result.get('status')
+            last_update = result.get('last_update', 'Unknown')
+            age_hours = result.get('age_hours')
 
-        print(f"{status_icon} {source} ({resolution})")
-        print(f"   Status: {status.upper()}")
-        print(f"   Last Update: {last_update}")
+            # Status icons
+            status_icon = {
+                'fresh': '✅',
+                'stale': '🔴',
+                'missing': '❌',
+                'empty': '❌',
+                'error': '⚠️',
+                'unknown': '❓'
+            }.get(status, '❓')
 
-        if age_hours is not None:
-            days = age_hours / 24
-            if days >= 1:
-                print(f"   Age: {days:.1f} days ({age_hours:.1f} hours)")
+            print(f"{status_icon} {source} ({resolution})")
+            print(f"   Status: {status.upper()}")
+            print(f"   Last Update: {last_update}")
+
+            if age_hours is not None:
+                days = age_hours / 24
+                if days >= 1:
+                    print(f"   Age: {days:.1f} days ({age_hours:.1f} hours)")
+                else:
+                    print(f"   Age: {age_hours:.1f} hours")
+
+            print(f"   Files: {result.get('total_files', 0)}")
+            print()
+
+    # Show non-critical sources
+    if non_critical_sources:
+        print("\nOPTIONAL DATA (Not used for daily signals, can be stale):")
+        print("-" * 80)
+        for result in non_critical_sources:
+            source = result.get('source')
+            resolution = result.get('resolution', '')
+            status = result.get('status')
+            last_update = result.get('last_update', 'Unknown')
+            age_hours = result.get('age_hours')
+
+            # Use different icons for non-critical sources
+            if status == 'stale':
+                status_icon = '⚠️'  # Warning instead of red X
             else:
-                print(f"   Age: {age_hours:.1f} hours")
+                status_icon = {
+                    'fresh': '✅',
+                    'missing': '❌',
+                    'empty': '❌',
+                    'error': '⚠️',
+                    'unknown': '❓'
+                }.get(status, '❓')
 
-        print(f"   Files: {result.get('total_files', 0)}")
-        print()
+            print(f"{status_icon} {source} ({resolution})")
+            print(f"   Status: {status.upper()}")
+            print(f"   Last Update: {last_update}")
 
-    # Overall assessment
+            if age_hours is not None:
+                days = age_hours / 24
+                if days >= 1:
+                    print(f"   Age: {days:.1f} days ({age_hours:.1f} hours)")
+                else:
+                    print(f"   Age: {age_hours:.1f} hours")
+
+            print(f"   Files: {result.get('total_files', 0)}")
+            print()
+
+    # Overall assessment (focus on critical sources only)
     print("=" * 80)
     print("FRESHNESS SUMMARY")
     print("=" * 80)
 
+    # Count all sources
     fresh_count = sum(1 for r in results if r.get('status') == 'fresh')
     stale_count = sum(1 for r in results if r.get('status') == 'stale')
     missing_count = sum(1 for r in results if r.get('status') in ['missing', 'empty'])
     error_count = sum(1 for r in results if r.get('status') == 'error')
 
-    total = len(results)
+    # Count critical sources only
+    critical_results = critical_sources  # From above
+    critical_fresh = sum(1 for r in critical_results if r.get('status') == 'fresh')
+    critical_stale = sum(1 for r in critical_results if r.get('status') == 'stale')
+    critical_missing = sum(1 for r in critical_results if r.get('status') in ['missing', 'empty'])
 
+    total = len(results)
+    total_critical = len(critical_results)
+
+    print(f"All Sources:      {fresh_count}/{total} fresh")
+    print(f"Critical (Daily): {critical_fresh}/{total_critical} fresh")
+    print()
     print(f"✅ Fresh:         {fresh_count}/{total}")
     print(f"🔴 Stale:         {stale_count}/{total}")
     print(f"❌ Missing/Empty: {missing_count}/{total}")
@@ -350,13 +413,16 @@ def print_freshness_report(results: list, as_json: bool = False):
     print("  12-hourly:     Fresh if ≤ 12h")
     print("  Daily:         Fresh if ≤ 48h (allows for 1-day publication lag)")
 
-    if fresh_count == total:
-        print("\n✅ All data sources are FRESH")
-    elif stale_count > 0:
-        print("\n🔴 Some data sources are STALE - run sync immediately")
+    # Assessment based on CRITICAL sources only
+    if critical_fresh == total_critical:
+        print("\n✅ All CRITICAL data sources are FRESH - ready for signals!")
+        if stale_count > 0:
+            print("   (Note: Some optional hourly data is stale, but this doesn't affect daily signals)")
+    elif critical_stale > 0:
+        print("\n🔴 CRITICAL data sources are STALE - run sync immediately!")
 
-    if missing_count > 0:
-        print("\n❌ Some data sources are MISSING - run initial sync")
+    if critical_missing > 0:
+        print("\n❌ CRITICAL data sources are MISSING - run initial sync!")
 
     print("\nRECOMMENDED ACTIONS:")
 
@@ -426,11 +492,13 @@ def main():
 
     print_freshness_report(results, as_json=args.json)
 
-    # Exit with error code if any stale or missing
-    stale_or_missing = sum(1 for r in results
-                          if r.get('status') in ['stale', 'missing', 'empty'])
+    # Exit with error code ONLY if CRITICAL (daily) sources are stale or missing
+    # Hourly data being stale is not a blocker for daily signals
+    critical_issues = sum(1 for r in results
+                         if r.get('resolution') == 'daily' and
+                         r.get('status') in ['stale', 'missing', 'empty'])
 
-    sys.exit(1 if stale_or_missing > 0 else 0)
+    sys.exit(1 if critical_issues > 0 else 0)
 
 
 if __name__ == '__main__':
