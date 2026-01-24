@@ -22,7 +22,6 @@ bitcoin-lab-btc-data-pipeline/
 ├── run.py                     # CLI entry point
 ├── .env                       # API keys (gitignored)
 ├── .env.example               # API keys template
-├── certs/                     # SSL certificates
 ├── config/                    # Configuration files
 ├── data/                      # Data storage
 ├── docs/                      # 📚 All documentation
