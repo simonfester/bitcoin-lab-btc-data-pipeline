@@ -1,6 +1,17 @@
 # Bitcoin Lab Data Pipeline
 
-A data pipeline for downloading, analysing, and validating Bitcoin on-chain trading signals.
+A comprehensive data pipeline for downloading, analyzing, and generating Bitcoin on-chain trading signals using the James Check framework.
+
+## 📚 Documentation
+
+**New here?** Check the [complete documentation →](docs/README.md)
+
+| Guide | Description |
+|-------|-------------|
+| **[Setup Guide](docs/setup/API_KEYS_SETUP.md)** | Configure API keys and get started |
+| **[Dashboard Workflow](docs/guides/DASHBOARD_WORKFLOW.md)** | Daily trading signal generation |
+| **[Quick Reference](docs/guides/QUICK_REFERENCE.md)** | Common commands cheat sheet |
+| **[Strategy Framework](docs/research/STRATEGY_FRAMEWORK.md)** | James Check implementation |
 
 ## Pipeline Architecture
 
@@ -32,25 +43,56 @@ A data pipeline for downloading, analysing, and validating Bitcoin on-chain trad
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
+## 🚀 Quick Start
+
+### Daily Trading Workflow (Recommended)
 
 ```bash
-# Setup
+# 1. One-command dashboard generation
+python run.py dashboard
+
+# Syncs all data → checks quality → calculates signals → opens dashboards
+```
+
+**See**: [Dashboard Workflow Guide](docs/guides/DASHBOARD_WORKFLOW.md)
+
+### First-Time Setup
+
+```bash
+# 1. Clone and install
+git clone <repo-url>
 cd bitcoin-lab-btc-data-pipeline
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Download data
-export BITCOIN_LAB_TOKEN="your-token"
-python run.py backfill
+# 2. Configure API keys
+cp .env.example .env
+nano .env  # Add your Bitcoin Lab and Glassnode API keys
 
+# 3. Verify setup
+python src/secrets.py
+
+# 4. Run first sync
+python run.py dashboard
+```
+
+**See**: [API Keys Setup Guide](docs/setup/API_KEYS_SETUP.md)
+
+### Advanced: Data Mining & Strategy Development
+
+```bash
 # Data mining (find signals)
 python -m src.miner
 
 # Walk-forward validation (test signals)
 python -m src.walk_forward
+
+# Custom backtests
+jupyter notebook research/
 ```
+
+**See**: [Strategy Framework](docs/research/STRATEGY_FRAMEWORK.md)
 
 ## Data Mining (Key Module)
 
@@ -232,11 +274,62 @@ bitcoin-lab-btc-data-pipeline/
 └── run.py
 ```
 
-## API Requirements
+## 📊 Generated Dashboards
 
-- **Tier 2** Bitcoin Lab subscription
-- Rate limit: 60 requests/minute
-- Weekly quota: 40M data points
+The pipeline generates two main dashboards:
+
+1. **`dashboard.html`** - 6-pillar on-chain analysis
+   - Valuation, Profitability, Spending, Supply, Activity, Miner Health
+
+2. **`dashboard_signals.html`** - Trading signals
+   - Entry signals (Checkmate, Buy The Dip)
+   - Exit signals (8-Metric Detector, LTH Distribution)
+
+## 🔑 API Requirements
+
+- **Bitcoin Lab** - Primary on-chain data source
+- **Glassnode** - Derivatives data (funding, liquidations)
+- **BRK** (FREE) - Backup on-chain data source
+
+**See**: [Data Source Configuration](docs/setup/DATA_SOURCE_CONFIG.md)
+
+## 📂 Repository Structure
+
+```
+bitcoin-lab-btc-data-pipeline/
+├── docs/                  # 📚 All documentation
+│   ├── setup/             # Configuration guides
+│   ├── guides/            # Usage workflows
+│   ├── research/          # Strategy development
+│   └── archive/           # Historical reports
+├── data/                  # Data storage
+│   ├── brk/daily/         # BRK on-chain metrics (FREE)
+│   ├── glassnode/daily/   # Derivatives data
+│   └── signals/           # Computed trading signals
+├── scripts/               # Executable utilities
+│   ├── calculate.py       # Signal computation
+│   ├── dashboard_new.py   # Main dashboard generator
+│   ├── dashboard_signals.py  # Signals dashboard
+│   └── sync_and_dashboard.py # Full pipeline wrapper
+├── src/                   # Core library
+│   ├── downloader.py      # Bitcoin Lab API
+│   ├── brk_downloader.py  # BRK API (FREE)
+│   ├── data_loader.py     # Unified data loader
+│   ├── secrets.py         # Secrets management
+│   └── trading_system.py  # Signal calculation
+├── research/              # Jupyter notebooks
+├── config/                # Configuration files
+├── run.py                 # CLI entry point
+├── CLAUDE.md              # Project instructions
+└── README.md              # This file
+```
+
+## 🆘 Need Help?
+
+- 📖 [Documentation Index](docs/README.md)
+- 🔑 [API Keys Setup](docs/setup/API_KEYS_SETUP.md)
+- 📊 [Dashboard Workflow](docs/guides/DASHBOARD_WORKFLOW.md)
+- 📋 [Quick Reference](docs/guides/QUICK_REFERENCE.md)
 
 ## License
 

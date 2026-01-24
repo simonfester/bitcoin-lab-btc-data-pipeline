@@ -34,6 +34,11 @@ Usage:
     ./run.py data-refresh         # Refresh cache from BRK (free)
     ./run.py data-load METRICS    # Load metrics (comma-separated)
     ./run.py signals              # Check current strategy signals
+
+    === DASHBOARD COMMANDS ===
+    ./run.py dashboard            # Full pipeline: sync + quality checks + calculate + open
+    ./run.py dashboard-quick      # Skip sync, just calculate and open dashboard
+    ./run.py dashboard-quality    # Check data quality only
 """
 
 import sys
@@ -87,6 +92,11 @@ def print_usage():
     print("  data-refresh      Refresh ALL metrics from BRK API (FREE)")
     print("  data-load         Load metrics: data-load price,sopr,mvrv")
     print("  signals           Check current STRAT-003 and Checkmate signals")
+    print("")
+    print("  === DASHBOARD COMMANDS ===")
+    print("  dashboard         Full pipeline: sync all → quality checks → calculate → open")
+    print("  dashboard-quick   Skip sync, just calculate and open dashboard")
+    print("  dashboard-quality Check data freshness and quality only")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -290,7 +300,34 @@ if __name__ == "__main__":
         from src.brk_downloader import cmd_discover as brk_discover
         query = sys.argv[2] if len(sys.argv) > 2 else None
         brk_discover(query)
-    
+
+    # === DASHBOARD COMMANDS ===
+    elif cmd == "dashboard":
+        """Full pipeline: sync all data, check quality, calculate, and open dashboard"""
+        import subprocess
+        subprocess.run([
+            sys.executable,
+            "scripts/sync_and_dashboard.py"
+        ] + sys.argv[2:])  # Forward any additional arguments
+
+    elif cmd == "dashboard-quick":
+        """Skip sync, just calculate and open dashboard"""
+        import subprocess
+        subprocess.run([
+            sys.executable,
+            "scripts/sync_and_dashboard.py",
+            "--skip-sync"
+        ])
+
+    elif cmd == "dashboard-quality":
+        """Check data freshness and quality only"""
+        import subprocess
+        subprocess.run([
+            sys.executable,
+            "scripts/sync_and_dashboard.py",
+            "--quality-only"
+        ])
+
     else:
         print(f"Unknown command: {cmd}\n")
         print_usage()

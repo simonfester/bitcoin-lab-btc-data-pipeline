@@ -16,10 +16,7 @@ import webbrowser
 import sys
 import time
 import requests
-
-# Bitcoin Lab API Configuration
-BITCOIN_LAB_API_URL = "https://api.researchbitcoin.net"
-BITCOIN_LAB_API_TOKEN = "ae92658e-373f-4fce-a5b3-1cfc1ffb4da6"
+import os
 
 # =============================================================================
 # CONFIGURATION
@@ -30,8 +27,18 @@ PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data" / "brk" / "daily"
 OUTPUT_PATH = PROJECT_ROOT / "dashboard.html"
 
-# Glassnode API Configuration (for derivatives data)
-GLASSNODE_API_KEY = "2oCFlBgw1NLdekwM7CjzbiYLH74"  # Your Glassnode API key
+# API Configuration - load from environment variables
+try:
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from src.secrets import get_bitcoin_lab_key, get_glassnode_key
+    BITCOIN_LAB_API_TOKEN = get_bitcoin_lab_key()
+    GLASSNODE_API_KEY = get_glassnode_key()
+except (ImportError, ValueError):
+    # Fallback to environment variables
+    BITCOIN_LAB_API_TOKEN = os.environ.get('BITCOIN_LAB_API_KEY') or os.environ.get('BITCOIN_LAB_TOKEN')
+    GLASSNODE_API_KEY = os.environ.get('GLASSNODE_API_KEY')
+
+BITCOIN_LAB_API_URL = "https://api.researchbitcoin.net"
 GLASSNODE_API_URL = "https://api.glassnode.com"
 
 # Free derivatives data directory (Binance/Bybit - backup)

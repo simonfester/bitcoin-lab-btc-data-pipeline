@@ -153,6 +153,144 @@ class DataQualityChecker:
 
         return 0
 
+    def check_value_ranges(self, df, metric, source):
+        """Check if values are within expected ranges for known metrics"""
+        # Define expected ranges for common metrics
+        ranges = {
+            'mvrv': (0, 15, 'MVRV rarely exceeds 15 outside extreme bubbles'),
+            'mvrv_z': (-2, 10, 'MVRV-Z typically between -2 and 10'),
+            'nupl': (-1, 1, 'NUPL bounded between -1 and 1 by definition'),
+            'sopr': (0.5, 2.0, 'SOPR rarely outside 0.5-2.0 range'),
+            'sopr_lth': (0.8, 1.5, 'LTH-SOPR typically 0.8-1.5'),
+            'sopr_sth': (0.7, 1.8, 'STH-SOPR typically 0.7-1.8'),
+            'price': (100, 1_000_000, 'BTC price historically 100-1M USD'),
+            'supply_total': (18_000_000, 21_000_000, 'Total supply capped at 21M'),
+            'difficulty': (0, float('inf'), 'Difficulty always positive'),
+            'puell_multiple': (0, 10, 'Puell Multiple rarely exceeds 10'),
+            'realized_profit_loss_ratio': (0, 50, 'Realized P/L ratio rarely >50'),
+        }
+
+        if metric in ranges:
+            min_val, max_val, description = ranges[metric]
+            values = df['value'].dropna()
+
+            out_of_range = ((values < min_val) | (values > max_val)).sum()
+
+            if out_of_range > 0:
+                pct = (out_of_range / len(values)) * 100
+                actual_min = values.min()
+                actual_max = values.max()
+
+                self.issues.append({
+                    'source': source,
+                    'metric': metric,
+                    'type': 'range_violation',
+                    'severity': 'medium' if pct < 1 else 'high',
+                    'count': out_of_range,
+                    'message': f"{out_of_range:,} values outside expected range [{min_val}, {max_val}] - actual [{actual_min:.2f}, {actual_max:.2f}]"
+                })
+            return out_of_range
+
+        return 0
+
+    def check_data_types(self, df, metric, source):
+        """Check that data types are correct"""
+        issues_found = 0
+
+        # Check time column is datetime
+        if 'time' in df.columns:
+            if not pd.api.types.is_datetime64_any_dtype(df['time']):
+                self.issues.append({
+                    'source': source,
+                    'metric': metric,
+                    'type': 'dtype',
+                    'severity': 'high',
+                    'count': 1,
+                    'message': f"'time' column is {df['time'].dtype}, expected datetime64"
+                })
+                issues_found += 1
+
+        # Check value column is numeric
+        if 'value' in df.columns:
+            if not pd.api.types.is_numeric_dtype(df['value']):
+                self.issues.append({
+                    'source': source,
+                    'metric': metric,
+                    'type': 'dtype',
+                    'severity': 'high',
+                    'count': 1,
+                    'message': f"'value' column is {df['value'].dtype}, expected numeric"
+                })
+                issues_found += 1
+
+        return issues_found
+
+    def check_cross_metric_consistency(self, all_metrics, source):
+        """Check consistency between related metrics"""
+        # Check if we have the required metrics
+        if 'mvrv' in all_metrics and 'market_cap' in all_metrics and 'realized_cap' in all_metrics:
+            mvrv_df = all_metrics['mvrv']
+            mcap_df = all_metrics['market_cap']
+            rcap_df = all_metrics['realized_cap']
+
+            # Merge on time
+            merged = mvrv_df.merge(mcap_df, on='time', suffixes=('_mvrv', '_mcap'))
+            merged = merged.merge(rcap_df, on='time')
+            merged = merged.rename(columns={'value': 'value_rcap'})
+
+            # Calculate expected MVRV
+            merged['expected_mvrv'] = merged['value_mcap'] / merged['value_rcap']
+            merged['mvrv_diff'] = abs(merged['value_mvrv'] - merged['expected_mvrv'])
+            merged['mvrv_pct_diff'] = (merged['mvrv_diff'] / merged['value_mvrv']) * 100
+
+            # Flag large discrepancies (>5%)
+            large_diff = (merged['mvrv_pct_diff'] > 5).sum()
+
+            if large_diff > 0:
+                pct = (large_diff / len(merged)) * 100
+                max_diff = merged['mvrv_pct_diff'].max()
+
+                self.issues.append({
+                    'source': source,
+                    'metric': 'mvrv_consistency',
+                    'type': 'consistency',
+                    'severity': 'medium' if pct < 1 else 'high',
+                    'count': large_diff,
+                    'message': f"{large_diff:,} rows where MVRV ≠ market_cap/realized_cap (max diff: {max_diff:.1f}%)"
+                })
+
+        # Check supply metrics sum correctly (if we have them)
+        if 'supply_lth' in all_metrics and 'supply_sth' in all_metrics and 'supply_total' in all_metrics:
+            lth_df = all_metrics['supply_lth']
+            sth_df = all_metrics['supply_sth']
+            total_df = all_metrics['supply_total']
+
+            # Merge on time
+            merged = lth_df.merge(sth_df, on='time', suffixes=('_lth', '_sth'))
+            merged = merged.merge(total_df, on='time')
+            merged = merged.rename(columns={'value': 'value_total'})
+
+            # Check if LTH + STH ≈ Total (allow 1% tolerance for exchange/other supply)
+            merged['calculated_total'] = merged['value_lth'] + merged['value_sth']
+            merged['diff'] = abs(merged['value_total'] - merged['calculated_total'])
+            merged['pct_diff'] = (merged['diff'] / merged['value_total']) * 100
+
+            # Flag differences >1%
+            large_diff = (merged['pct_diff'] > 1).sum()
+
+            if large_diff > 0:
+                pct = (large_diff / len(merged)) * 100
+                max_diff = merged['pct_diff'].max()
+
+                self.issues.append({
+                    'source': source,
+                    'metric': 'supply_consistency',
+                    'type': 'consistency',
+                    'severity': 'low' if pct < 5 else 'medium',
+                    'count': large_diff,
+                    'message': f"{large_diff:,} rows where LTH+STH ≠ Total Supply (max diff: {max_diff:.1f}%)"
+                })
+
 
 def check_brk_quality():
     """Check BRK data quality"""
@@ -168,6 +306,7 @@ def check_brk_quality():
 
     checker = DataQualityChecker()
     metrics_checked = 0
+    all_metrics = {}  # Store for cross-metric consistency checks
 
     for file in sorted(brk_dir.glob('*.parquet')):
         metric = file.stem
@@ -181,11 +320,20 @@ def check_brk_quality():
             checker.check_gaps(df, metric, 'BRK', expected_freq='1D')
             checker.check_outliers(df, metric, 'BRK')
             checker.check_negatives(df, metric, 'BRK')
+            checker.check_value_ranges(df, metric, 'BRK')
+            checker.check_data_types(df, metric, 'BRK')
+
+            # Store for consistency checks
+            all_metrics[metric] = df
 
             metrics_checked += 1
 
         except Exception as e:
             print(f"✗ {metric}: Error - {str(e)[:50]}")
+
+    # Run cross-metric consistency checks
+    if len(all_metrics) > 0:
+        checker.check_cross_metric_consistency(all_metrics, 'BRK')
 
     print(f"\n✓ Checked {metrics_checked} metrics")
 
@@ -233,6 +381,7 @@ def check_bl_quality(resolution='hourly'):
 
     checker = DataQualityChecker()
     metrics_checked = 0
+    all_metrics = {}  # Store for cross-metric consistency checks
 
     for file in sorted(bl_dir.glob('*.parquet')):
         metric = file.stem
@@ -247,11 +396,20 @@ def check_bl_quality(resolution='hourly'):
                              expected_freq=freq_map.get(res_dir, '1H'))
             checker.check_outliers(df, metric, f'BL-{resolution}')
             checker.check_negatives(df, metric, f'BL-{resolution}')
+            checker.check_value_ranges(df, metric, f'BL-{resolution}')
+            checker.check_data_types(df, metric, f'BL-{resolution}')
+
+            # Store for consistency checks
+            all_metrics[metric] = df
 
             metrics_checked += 1
 
         except Exception as e:
             print(f"✗ {metric}: Error - {str(e)[:50]}")
+
+    # Run cross-metric consistency checks
+    if len(all_metrics) > 0:
+        checker.check_cross_metric_consistency(all_metrics, f'BL-{resolution}')
 
     print(f"\n✓ Checked {metrics_checked} metrics")
 
@@ -287,11 +445,18 @@ def print_summary(brk_issues, bl_issues):
     print("=" * 80)
 
     total_issues = len(brk_issues) + len(bl_issues)
+    all_issues = brk_issues + bl_issues
 
     # Count by severity
-    high = sum(1 for i in brk_issues + bl_issues if i['severity'] == 'high')
-    medium = sum(1 for i in brk_issues + bl_issues if i['severity'] == 'medium')
-    low = sum(1 for i in brk_issues + bl_issues if i['severity'] == 'low')
+    high = sum(1 for i in all_issues if i['severity'] == 'high')
+    medium = sum(1 for i in all_issues if i['severity'] == 'medium')
+    low = sum(1 for i in all_issues if i['severity'] == 'low')
+
+    # Count by type
+    issue_types = {}
+    for issue in all_issues:
+        issue_type = issue['type']
+        issue_types[issue_type] = issue_types.get(issue_type, 0) + 1
 
     print(f"\nTotal Issues: {total_issues}")
     if high > 0:
@@ -300,6 +465,23 @@ def print_summary(brk_issues, bl_issues):
         print(f"  🟡 Medium Severity: {medium}")
     if low > 0:
         print(f"  ⚪ Low Severity:    {low}")
+
+    if issue_types:
+        print("\nIssues by Type:")
+        type_labels = {
+            'nulls': 'Null values',
+            'infinites': 'Infinite values',
+            'duplicates': 'Duplicate timestamps',
+            'gaps': 'Time gaps',
+            'outliers': 'Statistical outliers',
+            'negatives': 'Invalid negatives',
+            'range_violation': 'Values out of range',
+            'dtype': 'Data type errors',
+            'consistency': 'Cross-metric inconsistency'
+        }
+        for issue_type, count in sorted(issue_types.items(), key=lambda x: -x[1]):
+            label = type_labels.get(issue_type, issue_type)
+            print(f"  • {label}: {count}")
 
     print(f"\nBRK Issues:         {len(brk_issues)}")
     print(f"Bitcoin Lab Issues: {len(bl_issues)}")
@@ -321,14 +503,20 @@ def print_summary(brk_issues, bl_issues):
     if total_issues > 0:
         print("\nRECOMMENDED ACTIONS:")
 
-        if any(i['type'] == 'nulls' for i in brk_issues + bl_issues):
+        if any(i['type'] == 'nulls' for i in all_issues):
             print("  1. Run: python scripts/fix_data_issues.py")
 
-        if any(i['type'] == 'gaps' for i in brk_issues + bl_issues):
+        if any(i['type'] == 'gaps' for i in all_issues):
             print("  2. Check sync status: python run.py brk-status")
 
-        if any(i['severity'] == 'high' for i in brk_issues + bl_issues):
-            print("  3. Investigate high severity issues before trading")
+        if any(i['type'] == 'range_violation' for i in all_issues):
+            print("  3. Investigate out-of-range values (may indicate API issues)")
+
+        if any(i['type'] == 'consistency' for i in all_issues):
+            print("  4. Check cross-metric formulas and calculations")
+
+        if any(i['severity'] == 'high' for i in all_issues):
+            print("  5. Investigate high severity issues before trading")
 
     print(f"\nScan completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 

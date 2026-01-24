@@ -8,10 +8,10 @@ Supports multiple data sources with automatic fallback:
 
 Usage:
     from src.data_loader import DataLoader, load_data
-    
+
     # Quick load
     df = load_data(['price', 'sopr', 'mvrv_sth'])
-    
+
     # Full control
     loader = DataLoader()
     df = loader.load(['price', 'sopr_sth', 'sopr_lth', 'mvrv'])
@@ -27,6 +27,7 @@ from typing import List, Dict, Optional, Union, Tuple
 import json
 import time
 import warnings
+import os
 
 warnings.filterwarnings('ignore')
 
@@ -321,15 +322,35 @@ class DataLoader:
     ):
         """
         Initialize the data loader.
-        
+
         Args:
             cache_dir: Directory for local cache (default: ~/Documents/bitcoin-lab-btc-data-pipeline/data/cache)
-            bitcoin_lab_token: Bitcoin Lab API token (optional)
+            bitcoin_lab_token: Bitcoin Lab API token (optional, will try to load from .env)
             preferred_source: 'auto', 'local', 'bitcoin_lab', 'brk'
             verbose: Print status messages
         """
         self.cache_dir = cache_dir or Path.home() / "Documents" / "bitcoin-lab-btc-data-pipeline" / "data" / "cache"
-        self.bitcoin_lab_token = bitcoin_lab_token or "ae92658e-373f-4fce-a5b3-1cfc1ffb4da6"
+
+        # Get Bitcoin Lab token from: 1) parameter, 2) environment, 3) secrets manager
+        if bitcoin_lab_token:
+            self.bitcoin_lab_token = bitcoin_lab_token
+        else:
+            # Try environment variable (supports both naming conventions)
+            self.bitcoin_lab_token = (
+                os.environ.get('BITCOIN_LAB_API_KEY') or
+                os.environ.get('BITCOIN_LAB_TOKEN') or
+                None
+            )
+
+            # If not in environment, try secrets manager
+            if not self.bitcoin_lab_token:
+                try:
+                    from src.secrets import get_bitcoin_lab_key
+                    self.bitcoin_lab_token = get_bitcoin_lab_key()
+                except (ImportError, ValueError):
+                    # Secrets manager not available or key not configured
+                    pass
+
         self.preferred_source = preferred_source
         self.verbose = verbose
         

@@ -154,14 +154,17 @@ def check_bl_freshness(resolution='hourly') -> dict:
         'h1': 'hourly',
         'h4': 'h4',
         'h8': 'h8',
-        'h12': 'h12'
+        'h12': 'h12',
+        'daily': 'daily',
+        'd1': 'daily'
     }
 
     freq_map = {
         'hourly': '1H',
         'h4': '4H',
         'h8': '8H',
-        'h12': '12H'
+        'h12': '12H',
+        'daily': '1D'
     }
 
     res_dir = resolution_map.get(resolution, resolution)
@@ -396,7 +399,7 @@ def main():
     parser = argparse.ArgumentParser(description='Check data freshness')
     parser.add_argument('--source', choices=['brk', 'bl', 'gn', 'all'], default='all',
                        help='Data source to check (default: all)')
-    parser.add_argument('--resolution', choices=['hourly', 'h4', 'h8', 'h12', 'all'],
+    parser.add_argument('--resolution', choices=['daily', 'hourly', 'h4', 'h8', 'h12', 'all'],
                        default='all', help='Bitcoin Lab resolution (default: all)')
     parser.add_argument('--json', action='store_true',
                        help='Output as JSON')
@@ -412,7 +415,7 @@ def main():
     # Check Bitcoin Lab
     if args.source in ['bl', 'all']:
         if args.resolution == 'all':
-            for res in ['hourly', 'h4', 'h8', 'h12']:
+            for res in ['daily', 'hourly', 'h4', 'h8', 'h12']:
                 results.append(check_bl_freshness(res))
         else:
             results.append(check_bl_freshness(args.resolution))

@@ -82,6 +82,9 @@ def format_number(val, decimals=2, prefix="", suffix=""):
         return f"{prefix}{val/1_000_000:.2f}M{suffix}"
     if abs(val) >= 1_000:
         return f"{prefix}{val/1_000:.2f}K{suffix}"
+    # For very small numbers (e.g., funding rates), use more precision
+    if abs(val) < 0.001 and val != 0:
+        return f"{prefix}{val:.6f}{suffix}"
     return f"{prefix}{val:.{decimals}f}{suffix}"
 
 
