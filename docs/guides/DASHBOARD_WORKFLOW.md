@@ -72,7 +72,7 @@ python scripts/sync_and_dashboard.py --skip-glassnode
 ## What Gets Generated
 
 ### Dashboards Created
-1. **`dashboard.html`** - Main 6-pillar on-chain analysis dashboard
+1. **`dashboards/dashboard.html`** - Main 6-pillar on-chain analysis dashboard
    - Price levels & valuation
    - Profitability metrics
    - Spending behavior
@@ -80,7 +80,7 @@ python scripts/sync_and_dashboard.py --skip-glassnode
    - Activity metrics
    - Miner health
 
-2. **`dashboard_signals.html`** - Trading signals dashboard
+2. **`dashboards/dashboard_signals.html`** - Trading signals dashboard
    - Checkmate Signal
    - Buy The Dip checklist
    - 8-Metric Exit Detector
@@ -160,7 +160,7 @@ python run.py brk-sync
 
 ### "Dashboards not opening"
 - Add `--no-open` flag to skip browser opening
-- Manually open `dashboard.html` and `dashboard_signals.html`
+- Manually open `dashboards/dashboard.html` and `dashboards/dashboard_signals.html`
 
 ---
 
@@ -233,8 +233,9 @@ bitcoin-lab-btc-data-pipeline/
 │   ├── glassnode/daily/           # Glassnode derivatives
 │   └── signals/                   # Computed signals
 ├── run.py                         # CLI entry point
-├── dashboard.html                 # Generated main dashboard
-└── dashboard_signals.html         # Generated signals dashboard
+├── dashboards/                    # Generated dashboards
+│   ├── dashboard.html             # Main dashboard
+│   └── dashboard_signals.html     # Signals dashboard
 ```
 
 ---
@@ -266,8 +267,8 @@ bitcoin-lab-btc-data-pipeline/
 ## Next Steps
 
 1. **Run full sync**: `python run.py dashboard`
-2. **Review signals**: Check `dashboard_signals.html`
-3. **Analyze metrics**: Check `dashboard.html`
+2. **Review signals**: Check `dashboards/dashboard_signals.html`
+3. **Analyze metrics**: Check `dashboards/dashboard.html`
 4. **Set up automation**: Add cron job for daily updates
 5. **Customize**: Edit `scripts/calculate.py` for custom signals
 

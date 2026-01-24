@@ -25,7 +25,11 @@ import os
 # Data directories - use BRK as primary source (free, current data)
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data" / "brk" / "daily"
-OUTPUT_PATH = PROJECT_ROOT / "dashboard.html"
+DASHBOARDS_DIR = PROJECT_ROOT / "dashboards"
+OUTPUT_PATH = DASHBOARDS_DIR / "dashboard.html"
+
+# Ensure dashboards directory exists
+DASHBOARDS_DIR.mkdir(exist_ok=True)
 
 # API Configuration - load from environment variables
 try:

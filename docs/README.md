@@ -81,10 +81,10 @@ Past investigations and one-time analyses.
 python run.py dashboard
 
 # 2. View signals
-open dashboard_signals.html
+open dashboards/dashboard_signals.html
 
 # 3. View on-chain metrics
-open dashboard.html
+open dashboards/dashboard.html
 ```
 
 **Guide**: [Dashboard Workflow](guides/DASHBOARD_WORKFLOW.md)
@@ -142,7 +142,7 @@ jupyter notebook research/
 
 ## 📊 Dashboard Types
 
-### Main Dashboard (`dashboard.html`)
+### Main Dashboard (`dashboards/dashboard.html`)
 6-pillar on-chain analysis:
 1. **Valuation** - MVRV, MVRV-Z, AVIV
 2. **Profitability** - NUPL, Supply in Profit/Loss
@@ -151,7 +151,7 @@ jupyter notebook research/
 5. **Activity** - Liveliness, Vaultedness
 6. **Miner Health** - Puell Multiple, Difficulty
 
-### Signals Dashboard (`dashboard_signals.html`)
+### Signals Dashboard (`dashboards/dashboard_signals.html`)
 Actionable trading signals:
 - **Entry Signals** - Checkmate, Buy The Dip
 - **Exit Signals** - 8-Metric Detector, LTH Distribution

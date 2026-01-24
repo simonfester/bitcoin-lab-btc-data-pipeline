@@ -276,12 +276,12 @@ bitcoin-lab-btc-data-pipeline/
 
 ## 📊 Generated Dashboards
 
-The pipeline generates two main dashboards:
+The pipeline generates dashboards in the `dashboards/` folder:
 
-1. **`dashboard.html`** - 6-pillar on-chain analysis
+1. **`dashboards/dashboard.html`** - 6-pillar on-chain analysis
    - Valuation, Profitability, Spending, Supply, Activity, Miner Health
 
-2. **`dashboard_signals.html`** - Trading signals
+2. **`dashboards/dashboard_signals.html`** - Trading signals
    - Entry signals (Checkmate, Buy The Dip)
    - Exit signals (8-Metric Detector, LTH Distribution)
 

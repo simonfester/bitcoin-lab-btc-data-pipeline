@@ -17,7 +17,11 @@ from datetime import datetime
 import subprocess
 
 PROJECT_ROOT = Path(__file__).parent.parent
-OUTPUT_PATH = PROJECT_ROOT / "dashboard_quality.html"
+DASHBOARDS_DIR = PROJECT_ROOT / "dashboards"
+OUTPUT_PATH = DASHBOARDS_DIR / "dashboard_quality.html"
+
+# Ensure dashboards directory exists
+DASHBOARDS_DIR.mkdir(exist_ok=True)
 
 
 def run_quality_check():

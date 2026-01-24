@@ -31,9 +31,10 @@ bitcoin-lab-btc-data-pipeline/
 ├── scripts/                   # Executable utilities
 ├── src/                       # Core library
 ├── venv/                      # Python virtual environment
-├── dashboard.html             # Generated: main dashboard
-├── dashboard_signals.html     # Generated: signals dashboard
-└── dashboard_quality.html     # Generated: quality report
+└── dashboards/                # Generated dashboards
+    ├── dashboard.html         # Main dashboard
+    ├── dashboard_signals.html # Signals dashboard
+    └── dashboard_quality.html # Quality report
 ```
 
 ### Documentation Structure
@@ -188,8 +189,8 @@ docs/
 ### What Stays in Root
 - ✅ Entry points (`README.md`, `run.py`)
 - ✅ Configuration templates (`.env.example`)
-- ✅ Generated dashboards (`*.html`)
 - ✅ Essential project files (`CLAUDE.md`, `requirements.txt`)
+- ✅ Core directories (`src/`, `scripts/`, `data/`, `docs/`, `dashboards/`)
 
 ### What Goes in `docs/`
 - ✅ All markdown documentation

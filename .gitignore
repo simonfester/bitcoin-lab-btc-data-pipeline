@@ -113,9 +113,8 @@ certs/
 # =============================================================================
 # GENERATED FILES
 # =============================================================================
-dashboard.html
-dashboard_quality.html
-dashboard_signals.html
+# Generated dashboards
+dashboards/*.html
 
 # Keep docs directory structure
 !docs/

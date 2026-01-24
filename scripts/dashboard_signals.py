@@ -28,7 +28,11 @@ import requests
 
 PROJECT_ROOT = Path(__file__).parent.parent
 SIGNALS_DIR = PROJECT_ROOT / "data" / "signals"
-OUTPUT_PATH = PROJECT_ROOT / "dashboard_signals.html"
+DASHBOARDS_DIR = PROJECT_ROOT / "dashboards"
+OUTPUT_PATH = DASHBOARDS_DIR / "dashboard_signals.html"
+
+# Ensure dashboards directory exists
+DASHBOARDS_DIR.mkdir(exist_ok=True)
 
 # Live price API (only external call dashboard makes)
 COINBASE_API = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
