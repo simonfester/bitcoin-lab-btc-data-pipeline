@@ -57,6 +57,7 @@ metrics:
     priority: high
     tier: 1
     description: "Market Value to Realized Value ratio"
+    resolutions: [d1, h1, h4, h8, h12]  # API supports all
 
   - name: mvrv_z
     endpoint: market_value_to_realized_value
