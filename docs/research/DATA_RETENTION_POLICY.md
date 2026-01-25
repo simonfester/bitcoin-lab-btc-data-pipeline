@@ -316,6 +316,29 @@ df = df[df['time'] >= '2015-01-01'].copy()  # Filter in memory
 
 ---
 
+## Data Quality & Freshness Checks
+
+### Should We Only Check 2015+ Data?
+
+**No - Check all data, always.**
+
+**Why**:
+- ✅ Verifies complete dataset integrity (including archive)
+- ✅ Already smart (excludes pre-2015 from outlier detection)
+- ✅ Fast (6K vs 4K rows = milliseconds difference)
+- ✅ Catches corruption/sync issues anywhere in dataset
+- ✅ No false positives (quality checks handle historical quirks)
+
+**Current behavior is correct**:
+- `python scripts/check_data_quality.py` → Checks all data ✅
+- `python scripts/check_data_freshness.py` → Checks all data ✅
+- Smart filtering built-in (pre-2015 excluded from outliers)
+- Historical quirks recognized (price zeros, etc.)
+
+**Decision (2026-01-25)**: Keep checking all data. Works perfectly.
+
+---
+
 ## Final Recommendation
 
 ### 🏆 Official Policy
@@ -333,6 +356,7 @@ df = df[df['time'] >= '2015-01-01'].copy()  # Filter in memory
 - Filter dates in code
 - Use `BACKTEST_START = '2015-01-01'` constant
 - Document your filtering choices
+- Quality checks validate complete dataset
 
 ---
 
