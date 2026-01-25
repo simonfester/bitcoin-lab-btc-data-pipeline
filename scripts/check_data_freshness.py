@@ -55,16 +55,16 @@ def get_file_freshness(file_path: Path, expected_freq='1D') -> dict:
         age = now - last_timestamp
         age_hours = age.total_seconds() / 3600
 
-        # Strict resolution-aware freshness thresholds
-        # Fresh = within the expected update interval
-        # Note: Daily aggregates have 1-day publication lag (normal)
+        # Resolution-aware freshness thresholds
+        # Fresh = within reasonable update interval + publication lag
+        # Note: All data has publication lag (normal API behavior)
 
         thresholds = {
-            '1H': 1,      # Hourly: fresh if ≤ 1h
-            '4H': 4,      # 4-hourly: fresh if ≤ 4h
-            '8H': 8,      # 8-hourly: fresh if ≤ 8h
-            '12H': 12,    # 12-hourly: fresh if ≤ 12h
-            '1D': 48,     # Daily: fresh if ≤ 48h (allows for 1-day publication lag)
+            '1H': 3,      # Hourly: fresh if ≤ 3h (allows 1-2h publication lag)
+            '4H': 6,      # 4-hourly: fresh if ≤ 6h (allows 2h publication lag)
+            '8H': 10,     # 8-hourly: fresh if ≤ 10h (allows 2h publication lag)
+            '12H': 14,    # 12-hourly: fresh if ≤ 14h (allows 2h publication lag)
+            '1D': 48,     # Daily: fresh if ≤ 48h (allows 1-day publication lag)
         }
 
         fresh_threshold = thresholds.get(expected_freq, thresholds['1D'])
@@ -406,12 +406,12 @@ def print_freshness_report(results: list, as_json: bool = False):
     if error_count > 0:
         print(f"⚠️  Errors:        {error_count}/{total}")
 
-    print("\nFreshness Thresholds:")
-    print("  Hourly (h1):   Fresh if ≤ 1h")
-    print("  4-hourly (h4): Fresh if ≤ 4h")
-    print("  8-hourly (h8): Fresh if ≤ 8h")
-    print("  12-hourly:     Fresh if ≤ 12h")
-    print("  Daily:         Fresh if ≤ 48h (allows for 1-day publication lag)")
+    print("\nFreshness Thresholds (includes publication lag):")
+    print("  Hourly (h1):   Fresh if ≤ 3h  (1-2h publication lag)")
+    print("  4-hourly (h4): Fresh if ≤ 6h  (2h publication lag)")
+    print("  8-hourly (h8): Fresh if ≤ 10h (2h publication lag)")
+    print("  12-hourly:     Fresh if ≤ 14h (2h publication lag)")
+    print("  Daily:         Fresh if ≤ 48h (1-day publication lag)")
 
     # Assessment based on CRITICAL sources only
     if critical_fresh == total_critical:

@@ -6,6 +6,7 @@ One-click script to sync all data sources, validate quality, and open dashboards
 
 Usage:
     python scripts/sync_and_dashboard.py                    # Full sync + dashboard
+    python scripts/sync_and_dashboard.py --include-hourly   # Include hourly data for exits
     python scripts/sync_and_dashboard.py --skip-sync        # Skip sync, just calculate
     python scripts/sync_and_dashboard.py --quality-only     # Only check quality
     python scripts/sync_and_dashboard.py --no-open          # Don't open browsers
@@ -81,16 +82,32 @@ def sync_brk_data():
     )
 
 
-def sync_bitcoin_lab_data():
-    """Sync Bitcoin Lab daily data (backup source)."""
-    print_section("STEP 2: Sync Bitcoin Lab Data (Daily)")
+def sync_bitcoin_lab_data(include_hourly=True):
+    """Sync Bitcoin Lab data (daily + optional hourly).
 
-    # Bitcoin Lab daily sync is important for NUPL and clean price data
+    Args:
+        include_hourly: If True, also sync hourly data for exit signals
+    """
+    print_section("STEP 2: Sync Bitcoin Lab Data")
+
+    # Daily sync - important for NUPL and clean price data
     run_command(
         ["python", "run.py", "bl-sync-daily"],
         "Syncing Bitcoin Lab daily on-chain data",
         critical=False  # Non-critical - we have BRK as fallback
     )
+
+    # Hourly sync - useful for faster exit signals
+    if include_hourly:
+        print("\n📊 Syncing hourly data for intraday exit signals...")
+        run_command(
+            ["python", "run.py", "bl-sync-hourly"],
+            "Syncing Bitcoin Lab hourly data",
+            critical=False  # Non-critical - nice to have
+        )
+    else:
+        print("\n⏭️  Skipping hourly sync (use --include-hourly to enable)")
+
     return True
 
 
@@ -240,6 +257,8 @@ Examples:
                        help='Skip Bitcoin Lab sync')
     parser.add_argument('--skip-glassnode', action='store_true',
                        help='Skip Glassnode sync')
+    parser.add_argument('--include-hourly', action='store_true',
+                       help='Include Bitcoin Lab hourly data sync (for faster exit signals)')
     parser.add_argument('--quality-only', action='store_true',
                        help='Only check data quality, skip everything else')
     parser.add_argument('--no-open', action='store_true',
@@ -270,7 +289,7 @@ Examples:
             print_section("STEP 1: Sync BRK Data (SKIPPED)")
 
         if not args.skip_bitcoin_lab:
-            sync_bitcoin_lab_data()
+            sync_bitcoin_lab_data(include_hourly=args.include_hourly)
         else:
             print_section("STEP 2: Sync Bitcoin Lab Data (SKIPPED)")
 

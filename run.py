@@ -37,6 +37,7 @@ Usage:
 
     === DASHBOARD COMMANDS ===
     ./run.py dashboard            # Full pipeline: sync + quality checks + calculate + open
+    ./run.py dashboard --include-hourly  # Include hourly data for exit signals
     ./run.py dashboard-quick      # Skip sync, just calculate and open dashboard
     ./run.py dashboard-quality    # Check data quality only
 """
