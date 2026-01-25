@@ -50,19 +50,33 @@ BRK (Bitcoin Research Kit) uses different units and formats for some metrics com
 
 ---
 
-### 3. Price - Early Data Has Zeros
+### 3. Price - Pre-Exchange Era Zeros (Expected!)
 
-**Issue**: 550 data points (2009-2011) have `price = 0.00`
+**Issue**: 550 data points have `price = 0.00`
 
-**Why**:
-- BRK data starts from Bitcoin genesis (2009)
-- Early Bitcoin didn't have reliable exchange data
-- Price discovery was sparse in 2009-2011
+**Date Range**: 2009-01-08 to 2010-07-11
+- 2009: 358 zeros
+- 2010: 192 zeros (Jan-Jul 11)
+
+**Why This Is CORRECT**:
+- Bitcoin was created **January 2009**
+- First exchange (Mt. Gox) launched **July 2010**
+- Before exchanges existed, Bitcoin had **no market price**
+- Price = $0.00 is historically accurate!
+
+**Price Discovery Timeline**:
+- `2009-01-08` to `2010-07-11`: **$0.00** (pre-exchange era)
+- `2010-07-12`: **$0.01** (first exchange price!)
+- `2010-08-01`: **~$0.06** (stable early trading)
+- `2011-04-15`: **$0.99** (first time near $1)
 
 **How We Handle It**:
-- ✅ Use Bitcoin Lab for price (clean data)
-- ✅ Quality check allows zeros (doesn't fail)
-- ⚠️ If using BRK price, filter out zeros: `df[df.price > 0]`
+- ✅ Quality check recognizes this as expected (not an error)
+- ✅ Use Bitcoin Lab for clean price (starts later)
+- ⚠️ For analysis, filter to `>= 2010-07-12` (exchange era)
+- ⚠️ Or filter to `>= 2011-01-01` (stable data)
+
+**Not a Bug**: This is historical reality - Bitcoin existed before it had a price!
 
 ---
 

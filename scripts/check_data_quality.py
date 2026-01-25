@@ -177,6 +177,7 @@ class DataQualityChecker:
         Note: BRK uses different formats for some metrics:
         - NUPL: Absolute USD value instead of ratio
         - Supply: Satoshis instead of BTC
+        - Price: Has zeros before 2010-07-12 (pre-exchange era)
         - Early data (pre-2015) has extreme volatility
         """
         # Skip BRK-specific format differences
@@ -194,6 +195,22 @@ class DataQualityChecker:
                 satoshi_range = ((values >= 1e14) & (values <= 2.1e15)).sum()
                 if satoshi_range > len(values) * 0.9:  # >90% in satoshi range
                     return 0  # Valid satoshi format
+
+            # Price: Zeros before 2010-07-12 are expected (pre-exchange era)
+            # Bitcoin created Jan 2009, first exchange (Mt. Gox) launched July 2010
+            if metric == 'price':
+                values = df['value'].dropna()
+                zeros = (values == 0).sum()
+
+                if zeros > 0 and 'time' in df.columns:
+                    # Check if zeros are only in pre-exchange era
+                    zero_dates = df[df['value'] == 0]['time']
+                    if len(zero_dates) > 0:
+                        last_zero = zero_dates.max()
+                        # If last zero is before mid-2010, it's expected
+                        if last_zero < pd.Timestamp('2010-08-01', tz='UTC'):
+                            # This is historical reality, not a data error
+                            return 0
 
         # Define expected ranges for common metrics
         ranges = {
