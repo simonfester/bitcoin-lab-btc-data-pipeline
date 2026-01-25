@@ -12,6 +12,19 @@ A comprehensive data pipeline for downloading, analyzing, and generating Bitcoin
 | **[Dashboard Workflow](docs/guides/DASHBOARD_WORKFLOW.md)** | Daily trading signal generation |
 | **[Quick Reference](docs/guides/QUICK_REFERENCE.md)** | Common commands cheat sheet |
 | **[Strategy Framework](docs/research/STRATEGY_FRAMEWORK.md)** | James Check implementation |
+| **[Backtest Start Dates](docs/research/BACKTEST_START_DATES.md)** | When to start backtests (2015-01-01 recommended) |
+
+## ⚠️ IMPORTANT: Data Retention Policy
+
+**DO NOT DELETE HISTORICAL DATA!**
+
+- ✅ **Keep all raw data** in `data/` folders (even pre-2015)
+- ✅ **Filter dates in code** when analyzing: `df = df[df['time'] >= '2015-01-01']`
+- ❌ **Don't delete files** - storage is cheap, data is precious
+
+**Why**: Historical data is Bitcoin's documented history and irreplaceable. For backtesting, use **2015-01-01** as your start date (cleanest data), but keep all historical files.
+
+📖 [**Read the full policy**](docs/research/DATA_RETENTION_POLICY.md) - explains why to keep all data
 
 ## Pipeline Architecture
 
