@@ -78,6 +78,7 @@ metrics:
     priority: high
     tier: 2
     description: "MVRV for Short-Term Holders"
+    resolutions: [d1, h1, h4, h8, h12]  # API supports all
 
   - name: nvt
     endpoint: network_value_to_transaction
@@ -464,6 +465,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Daily realized profit"
+    resolutions: [d1, h1, h4, h8, h12]  # API supports all
 
   - name: realized_loss
     endpoint: realizedloss

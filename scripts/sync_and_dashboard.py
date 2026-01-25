@@ -111,23 +111,44 @@ def sync_bitcoin_lab_data(include_hourly=True):
     return True
 
 
-def sync_glassnode_data():
-    """Sync Glassnode derivatives data."""
+def sync_glassnode_data(include_hourly=True):
+    """Sync Glassnode derivatives data (daily + optional hourly).
+
+    Args:
+        include_hourly: If True, also sync hourly derivatives for Buy The Dip strategy
+    """
     print_section("STEP 3: Sync Glassnode Data (Derivatives)")
 
-    # Check if sync script exists
-    gn_sync_script = PROJECT_ROOT / "scripts" / "sync_glassnode_daily.py"
+    # Daily sync - always run
+    gn_sync_daily = PROJECT_ROOT / "scripts" / "sync_glassnode_daily.py"
 
-    if not gn_sync_script.exists():
-        print("⚠️  Glassnode sync script not found - SKIPPING")
-        print(f"   Expected: {gn_sync_script}")
+    if not gn_sync_daily.exists():
+        print("⚠️  Glassnode daily sync script not found - SKIPPING")
+        print(f"   Expected: {gn_sync_daily}")
         return False
 
     run_command(
-        ["python", str(gn_sync_script)],
-        "Syncing Glassnode derivatives data",
+        ["python", str(gn_sync_daily)],
+        "Syncing Glassnode daily derivatives data",
         critical=False  # Non-critical if Glassnode not set up
     )
+
+    # Hourly sync - for intraday Buy The Dip signals
+    if include_hourly:
+        print("\n📊 Syncing hourly derivatives for Buy The Dip strategy...")
+        gn_sync_hourly = PROJECT_ROOT / "scripts" / "sync_glassnode_hourly.py"
+
+        if gn_sync_hourly.exists():
+            run_command(
+                ["python", str(gn_sync_hourly)],
+                "Syncing Glassnode hourly derivatives data",
+                critical=False
+            )
+        else:
+            print("⚠️  Glassnode hourly sync script not found - SKIPPING")
+    else:
+        print("\n⏭️  Skipping hourly derivatives sync")
+
     return True
 
 
@@ -295,7 +316,7 @@ Examples:
             print_section("STEP 2: Sync Bitcoin Lab Data (SKIPPED)")
 
         if not args.skip_glassnode:
-            sync_glassnode_data()
+            sync_glassnode_data(include_hourly=not args.skip_hourly)
         else:
             print_section("STEP 3: Sync Glassnode Data (SKIPPED)")
 
