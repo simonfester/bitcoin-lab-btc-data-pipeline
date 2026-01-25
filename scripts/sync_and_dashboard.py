@@ -10,16 +10,18 @@ Usage:
     python scripts/sync_and_dashboard.py --quality-only     # Only check quality
     python scripts/sync_and_dashboard.py --no-open          # Don't open browsers
     python scripts/sync_and_dashboard.py --skip-brk         # Skip BRK sync
+    python scripts/sync_and_dashboard.py --skip-bitcoin-lab # Skip Bitcoin Lab sync
     python scripts/sync_and_dashboard.py --skip-glassnode   # Skip Glassnode sync
 
 Pipeline:
     1. Sync BRK data (FREE, primary source)
-    2. Sync Glassnode data (derivatives)
-    3. Check data freshness
-    4. Check data quality
-    5. Run signal calculations
-    6. Generate dashboards
-    7. Open in browser
+    2. Sync Bitcoin Lab data (daily backup)
+    3. Sync Glassnode data (derivatives)
+    4. Check data freshness
+    5. Check data quality
+    6. Run signal calculations
+    7. Generate dashboards
+    8. Open in browser
 """
 
 import subprocess
@@ -79,9 +81,22 @@ def sync_brk_data():
     )
 
 
+def sync_bitcoin_lab_data():
+    """Sync Bitcoin Lab daily data (backup source)."""
+    print_section("STEP 2: Sync Bitcoin Lab Data (Daily)")
+
+    # Bitcoin Lab daily sync is important for NUPL and clean price data
+    run_command(
+        ["python", "run.py", "bl-sync-daily"],
+        "Syncing Bitcoin Lab daily on-chain data",
+        critical=False  # Non-critical - we have BRK as fallback
+    )
+    return True
+
+
 def sync_glassnode_data():
     """Sync Glassnode derivatives data."""
-    print_section("STEP 2: Sync Glassnode Data (Derivatives)")
+    print_section("STEP 3: Sync Glassnode Data (Derivatives)")
 
     # Check if sync script exists
     gn_sync_script = PROJECT_ROOT / "scripts" / "sync_glassnode_daily.py"
@@ -101,7 +116,7 @@ def sync_glassnode_data():
 
 def check_data_freshness():
     """Check if data is fresh."""
-    print_section("STEP 3: Check Data Freshness")
+    print_section("STEP 4: Check Data Freshness")
 
     freshness_script = PROJECT_ROOT / "scripts" / "check_data_freshness.py"
 
@@ -127,7 +142,7 @@ def check_data_freshness():
 
 def check_data_quality():
     """Check data quality."""
-    print_section("STEP 4: Check Data Quality")
+    print_section("STEP 5: Check Data Quality")
 
     quality_script = PROJECT_ROOT / "scripts" / "check_data_quality.py"
 
@@ -153,7 +168,7 @@ def check_data_quality():
 
 def run_calculations():
     """Run signal calculations."""
-    print_section("STEP 5: Calculate Trading Signals")
+    print_section("STEP 6: Calculate Trading Signals")
 
     calc_script = PROJECT_ROOT / "scripts" / "calculate.py"
 
@@ -170,7 +185,7 @@ def run_calculations():
 
 def generate_dashboards(open_browser: bool = True):
     """Generate dashboard HTML files."""
-    print_section("STEP 6: Generate Dashboards")
+    print_section("STEP 7: Generate Dashboards")
 
     # Generate main dashboard
     dashboard_script = PROJECT_ROOT / "scripts" / "dashboard_new.py"
@@ -221,6 +236,8 @@ Examples:
                        help='Skip data sync, only calculate and generate dashboards')
     parser.add_argument('--skip-brk', action='store_true',
                        help='Skip BRK sync')
+    parser.add_argument('--skip-bitcoin-lab', action='store_true',
+                       help='Skip Bitcoin Lab sync')
     parser.add_argument('--skip-glassnode', action='store_true',
                        help='Skip Glassnode sync')
     parser.add_argument('--quality-only', action='store_true',
@@ -245,28 +262,33 @@ Examples:
         print("=" * 80)
         return
 
-    # Step 1-2: Sync data sources
+    # Step 1-3: Sync data sources
     if not args.skip_sync:
         if not args.skip_brk:
             sync_brk_data()
         else:
             print_section("STEP 1: Sync BRK Data (SKIPPED)")
 
+        if not args.skip_bitcoin_lab:
+            sync_bitcoin_lab_data()
+        else:
+            print_section("STEP 2: Sync Bitcoin Lab Data (SKIPPED)")
+
         if not args.skip_glassnode:
             sync_glassnode_data()
         else:
-            print_section("STEP 2: Sync Glassnode Data (SKIPPED)")
+            print_section("STEP 3: Sync Glassnode Data (SKIPPED)")
 
-        # Step 3-4: Quality checks
+        # Step 4-5: Quality checks
         check_data_freshness()
         check_data_quality()
     else:
-        print_section("STEPS 1-4: Data Sync & Quality Checks (SKIPPED)")
+        print_section("STEPS 1-5: Data Sync & Quality Checks (SKIPPED)")
 
-    # Step 5: Run calculations
+    # Step 6: Run calculations
     run_calculations()
 
-    # Step 6: Generate dashboards
+    # Step 7: Generate dashboards
     generate_dashboards(open_browser=not args.no_open)
 
     # Final summary
