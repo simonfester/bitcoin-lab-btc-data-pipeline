@@ -5,8 +5,8 @@ Sync All Data & Generate Dashboard
 One-click script to sync all data sources, validate quality, and open dashboards.
 
 Usage:
-    python scripts/sync_and_dashboard.py                    # Full sync + dashboard
-    python scripts/sync_and_dashboard.py --include-hourly   # Include hourly data for exits
+    python scripts/sync_and_dashboard.py                    # Full sync + dashboard (includes hourly)
+    python scripts/sync_and_dashboard.py --skip-hourly      # Skip hourly data (saves quota)
     python scripts/sync_and_dashboard.py --skip-sync        # Skip sync, just calculate
     python scripts/sync_and_dashboard.py --quality-only     # Only check quality
     python scripts/sync_and_dashboard.py --no-open          # Don't open browsers
@@ -16,7 +16,7 @@ Usage:
 
 Pipeline:
     1. Sync BRK data (FREE, primary source)
-    2. Sync Bitcoin Lab data (daily backup)
+    2. Sync Bitcoin Lab data (daily + hourly for exit signals)
     3. Sync Glassnode data (derivatives)
     4. Check data freshness
     5. Check data quality
@@ -97,7 +97,7 @@ def sync_bitcoin_lab_data(include_hourly=True):
         critical=False  # Non-critical - we have BRK as fallback
     )
 
-    # Hourly sync - useful for faster exit signals
+    # Hourly sync - useful for faster exit signals (enabled by default)
     if include_hourly:
         print("\n📊 Syncing hourly data for intraday exit signals...")
         run_command(
@@ -106,7 +106,7 @@ def sync_bitcoin_lab_data(include_hourly=True):
             critical=False  # Non-critical - nice to have
         )
     else:
-        print("\n⏭️  Skipping hourly sync (use --include-hourly to enable)")
+        print("\n⏭️  Skipping hourly sync (use without --skip-hourly to enable)")
 
     return True
 
@@ -242,7 +242,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python scripts/sync_and_dashboard.py                    # Full pipeline
+  python scripts/sync_and_dashboard.py                    # Full pipeline (includes hourly)
+  python scripts/sync_and_dashboard.py --skip-hourly      # Skip hourly sync (saves quota)
   python scripts/sync_and_dashboard.py --skip-sync        # Only calculate + dashboard
   python scripts/sync_and_dashboard.py --quality-only     # Only check quality
   python scripts/sync_and_dashboard.py --no-open          # Don't open browsers
@@ -257,8 +258,8 @@ Examples:
                        help='Skip Bitcoin Lab sync')
     parser.add_argument('--skip-glassnode', action='store_true',
                        help='Skip Glassnode sync')
-    parser.add_argument('--include-hourly', action='store_true',
-                       help='Include Bitcoin Lab hourly data sync (for faster exit signals)')
+    parser.add_argument('--skip-hourly', action='store_true',
+                       help='Skip Bitcoin Lab hourly data sync (saves API quota)')
     parser.add_argument('--quality-only', action='store_true',
                        help='Only check data quality, skip everything else')
     parser.add_argument('--no-open', action='store_true',
@@ -289,7 +290,7 @@ Examples:
             print_section("STEP 1: Sync BRK Data (SKIPPED)")
 
         if not args.skip_bitcoin_lab:
-            sync_bitcoin_lab_data(include_hourly=args.include_hourly)
+            sync_bitcoin_lab_data(include_hourly=not args.skip_hourly)
         else:
             print_section("STEP 2: Sync Bitcoin Lab Data (SKIPPED)")
 

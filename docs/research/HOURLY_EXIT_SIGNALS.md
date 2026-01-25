@@ -43,13 +43,16 @@ Hourly SOPR: Spiking to 1.8+ (LTH taking profit!)
 
 ## 🔧 Setup
 
-### 1. Enable Hourly Data Sync
+### 1. Hourly Data Sync (Enabled by Default)
 
 ```bash
-# Option A: Full sync with hourly data
-python run.py dashboard --include-hourly
+# Option A: Full sync with hourly data (DEFAULT)
+python run.py dashboard
 
-# Option B: Sync hourly data only (if daily already synced)
+# Option B: Skip hourly to save quota
+python run.py dashboard --skip-hourly
+
+# Option C: Sync hourly data only (if daily already synced)
 python run.py bl-sync-hourly
 ```
 
@@ -303,11 +306,11 @@ Total:       ~70-140 credits/day
 
 ## 🚀 Usage Commands
 
-### Sync with Hourly Data
+### Default: With Hourly Data
 
 ```bash
-# Full sync with hourly
-python run.py dashboard --include-hourly
+# Full sync with hourly (DEFAULT)
+python run.py dashboard
 
 # Just sync hourly (if daily already fresh)
 python run.py bl-sync-hourly
@@ -316,11 +319,11 @@ python run.py bl-sync-hourly
 python run.py quota
 ```
 
-### Without Hourly (Default)
+### Without Hourly (Save Quota)
 
 ```bash
 # Daily only (saves quota)
-python run.py dashboard
+python run.py dashboard --skip-hourly
 
 # Skip Bitcoin Lab entirely (use BRK only)
 python run.py dashboard --skip-bitcoin-lab
@@ -396,17 +399,18 @@ python run.py quota-history
 
 ## 🏆 Summary
 
-**Setup**: Use `--include-hourly` flag
+**Setup**: Hourly data enabled by default
 **Strategy**: Daily entries, hourly exits
 **Benefit**: Faster exit response
-**Cost**: ~3x more API credits
-**When to use**: Testing intraday signals, faster exits
+**Cost**: ~3x more API credits (vs daily-only)
+**When to skip**: Use `--skip-hourly` to save quota
 
 ```bash
-# Enable hourly data
-python run.py dashboard --include-hourly
+# Default: hourly data included
+python run.py dashboard
 
-# Your data will be fresh for both timeframes!
+# Skip hourly to save quota
+python run.py dashboard --skip-hourly
 ```
 
 ---

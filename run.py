@@ -36,8 +36,8 @@ Usage:
     ./run.py signals              # Check current strategy signals
 
     === DASHBOARD COMMANDS ===
-    ./run.py dashboard            # Full pipeline: sync + quality checks + calculate + open
-    ./run.py dashboard --include-hourly  # Include hourly data for exit signals
+    ./run.py dashboard            # Full pipeline: sync all (includes hourly) + calculate + open
+    ./run.py dashboard --skip-hourly  # Skip hourly data sync (saves quota)
     ./run.py dashboard-quick      # Skip sync, just calculate and open dashboard
     ./run.py dashboard-quality    # Check data quality only
 """
