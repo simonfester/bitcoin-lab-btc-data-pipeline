@@ -40,10 +40,20 @@ Usage:
     ./run.py dashboard --skip-hourly  # Skip hourly data sync (saves quota)
     ./run.py dashboard-quick      # Skip sync, just calculate and open dashboard
     ./run.py dashboard-quality    # Check data quality only
+
+    === BACKTEST DATABASE COMMANDS ===
+    ./run.py backtest-stats       # Show database statistics
+    ./run.py backtest-list        # List recent backtest runs
+    ./run.py backtest-top sharpe  # Top runs by metric (sharpe, return_pct, etc)
+    ./run.py backtest-strategies  # Summary by strategy
 """
 
 import sys
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -98,6 +108,12 @@ def print_usage():
     print("  dashboard         Full pipeline: sync all → quality checks → calculate → open")
     print("  dashboard-quick   Skip sync, just calculate and open dashboard")
     print("  dashboard-quality Check data freshness and quality only")
+    print("")
+    print("  === BACKTEST DATABASE COMMANDS ===")
+    print("  backtest-stats      Show database statistics")
+    print("  backtest-list [N]   List recent N runs (default: 20)")
+    print("  backtest-top [M] [N]  Top N runs by metric M (default: sharpe, 10)")
+    print("  backtest-strategies Summary by strategy with best performance")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -328,6 +344,73 @@ if __name__ == "__main__":
             "scripts/sync_and_dashboard.py",
             "--quality-only"
         ])
+
+    # === BACKTEST DATABASE COMMANDS ===
+    elif cmd == "backtest-stats":
+        """Show backtest database statistics"""
+        from src.backtest_db import BacktestDB
+        db = BacktestDB()
+        stats = db.get_stats()
+        print("\n=== Backtest Database Stats ===")
+        print(f"Total runs:       {stats['total_runs']}")
+        print(f"Total strategies: {stats['total_strategies']}")
+        print(f"First run:        {stats['first_run'] or 'N/A'}")
+        print(f"Last run:         {stats['last_run'] or 'N/A'}")
+        print(f"Database:         {stats['db_path']}")
+        print(f"Runs directory:   {stats['runs_dir']}")
+
+    elif cmd == "backtest-list":
+        """List recent backtest runs"""
+        from src.backtest_db import BacktestDB
+        limit = int(sys.argv[2]) if len(sys.argv) > 2 else 20
+        strategy_id = sys.argv[3] if len(sys.argv) > 3 else None
+
+        db = BacktestDB()
+        runs = db.get_runs(strategy_id=strategy_id, limit=limit)
+
+        print(f"\n{'Run ID':<22} {'Strategy':<12} {'Return':>10} {'Sharpe':>8} {'DD':>8} {'Trades':>7}")
+        print("-" * 75)
+        for run in runs:
+            ret = run['return_pct'] or 0
+            sharpe = run['sharpe'] or 0
+            dd = run['max_dd'] or 0
+            trades = run['num_trades'] or 0
+            print(f"{run['run_id']:<22} {run['strategy_id']:<12} "
+                  f"{ret:>+9.1f}% {sharpe:>8.2f} {dd:>7.1f}% {trades:>7}")
+
+    elif cmd == "backtest-top":
+        """Show top performing backtests"""
+        from src.backtest_db import BacktestDB
+        metric = sys.argv[2] if len(sys.argv) > 2 else "sharpe"
+        limit = int(sys.argv[3]) if len(sys.argv) > 3 else 10
+
+        db = BacktestDB()
+        runs = db.get_top_runs(metric=metric, limit=limit)
+
+        print(f"\n=== Top {limit} by {metric} ===")
+        print(f"{'Run ID':<22} {'Strategy':<12} {'Return':>10} {'Sharpe':>8} {'DD':>8}")
+        print("-" * 65)
+        for run in runs:
+            ret = run['return_pct'] or 0
+            sharpe = run['sharpe'] or 0
+            dd = run['max_dd'] or 0
+            print(f"{run['run_id']:<22} {run['strategy_id']:<12} "
+                  f"{ret:>+9.1f}% {sharpe:>8.2f} {dd:>7.1f}%")
+
+    elif cmd == "backtest-strategies":
+        """Show backtest summary by strategy"""
+        from src.backtest_db import BacktestDB
+        db = BacktestDB()
+        strategies = db.get_strategies()
+
+        print(f"\n{'Strategy':<15} {'Runs':>6} {'Best Return':>12} {'Best Sharpe':>12} {'Last Run':<20}")
+        print("-" * 75)
+        for s in strategies:
+            best_ret = s['best_return'] or 0
+            best_sharpe = s['best_sharpe'] or 0
+            last_run = (s['last_run'] or '')[:19]
+            print(f"{s['strategy_id']:<15} {s['run_count']:>6} "
+                  f"{best_ret:>+11.1f}% {best_sharpe:>12.2f} {last_run}")
 
     else:
         print(f"Unknown command: {cmd}\n")

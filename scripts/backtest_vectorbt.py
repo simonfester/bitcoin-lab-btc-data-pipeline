@@ -128,21 +128,50 @@ def get_results_path(strategy_config: dict) -> Path:
     return STRATEGIES_DIR / f"unknown_results.json"
 
 
-def save_strategy_results(strategy_config: dict, results: dict) -> Path:
-    """Save backtest results to sidecar file."""
+def save_strategy_results(strategy_config: dict, results: dict, save_to_db: bool = True) -> Path:
+    """Save backtest results to sidecar file and database."""
     results_path = get_results_path(strategy_config)
+
+    strategy_id = strategy_config.get('id', 'unknown')
+    strategy_name = strategy_config.get('name', 'Unknown')
 
     # Add strategy metadata
     output = {
-        "strategy_id": strategy_config.get('id', 'unknown'),
-        "strategy_name": strategy_config.get('name', 'Unknown'),
+        "strategy_id": strategy_id,
+        "strategy_name": strategy_name,
         "strategy_version": strategy_config.get('version', '1.0'),
         "run_date": datetime.now().isoformat(),
         **results
     }
 
+    # Save to sidecar file (for backward compatibility with dashboard)
     with open(results_path, 'w') as f:
         json.dump(output, f, indent=2)
+
+    # Save to database for long-term storage and querying
+    if save_to_db:
+        try:
+            from src.backtest_db import BacktestDB
+
+            db = BacktestDB()
+
+            # Extract parameters from strategy config
+            parameters = {
+                'entry': strategy_config.get('entry', {}),
+                'exit': strategy_config.get('exit', {}),
+                'version': strategy_config.get('version', '1.0')
+            }
+
+            run_id = db.save_run(
+                strategy_id=strategy_id,
+                strategy_name=strategy_name,
+                results=results,
+                parameters=parameters
+            )
+            print(f"  ✓ Saved to database: {run_id}")
+
+        except Exception as e:
+            print(f"  ⚠ Database save failed: {e}")
 
     return results_path
 
