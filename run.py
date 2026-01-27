@@ -114,6 +114,7 @@ def print_usage():
     print("  backtest-list [N]   List recent N runs (default: 20)")
     print("  backtest-top [M] [N]  Top N runs by metric M (default: sharpe, 10)")
     print("  backtest-strategies Summary by strategy with best performance")
+    print("  backtest-gui        Launch Streamlit backtest GUI")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -411,6 +412,18 @@ if __name__ == "__main__":
             last_run = (s['last_run'] or '')[:19]
             print(f"{s['strategy_id']:<15} {s['run_count']:>6} "
                   f"{best_ret:>+11.1f}% {best_sharpe:>12.2f} {last_run}")
+
+    elif cmd == "backtest-gui":
+        """Launch Streamlit backtest GUI"""
+        import subprocess
+        print("\n🚀 Launching Backtest GUI...")
+        print("   Open http://localhost:8501 in your browser")
+        print("   Press Ctrl+C to stop\n")
+        subprocess.run([
+            sys.executable, "-m", "streamlit", "run",
+            "scripts/backtest_gui.py",
+            "--server.headless", "true"
+        ])
 
     else:
         print(f"Unknown command: {cmd}\n")
