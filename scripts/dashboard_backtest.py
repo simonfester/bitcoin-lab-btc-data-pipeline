@@ -1643,9 +1643,9 @@ def generate_index_page(results: list) -> str:
         <h1>Backtest Results</h1>
         <div class="subtitle">Click on a strategy to view detailed results</div>
         <div class="nav">
+            <a href="dashboard_runs.html">All Runs</a>
             <a href="dashboard.html">Dashboard</a>
             <a href="dashboard_signals.html">Trading Signals</a>
-            <a href="dashboard_quality.html">Data Quality</a>
         </div>
     </div>
 
@@ -2975,6 +2975,447 @@ def generate_legacy_dashboard_html(data: dict, wf_data: dict = None) -> str:
 
 
 # =============================================================================
+# ALL RUNS BROWSER PAGE
+# =============================================================================
+
+def generate_runs_browser_page() -> str:
+    """Generate interactive page to browse all backtest runs from database."""
+    try:
+        from src.backtest_db import BacktestDB, RUNS_DIR
+        db = BacktestDB()
+        runs = db.get_runs(limit=1000)
+        stats = db.get_stats()
+        strategies = db.get_strategies()
+    except Exception as e:
+        return f"<html><body><h1>Error loading database: {e}</h1></body></html>"
+
+    # Generate table rows
+    table_rows = []
+    for run in runs:
+        run_id = run['run_id']
+        strategy_id = run['strategy_id'] or ''
+        ret = run['return_pct'] or 0
+        sharpe = run['sharpe'] or 0
+        sortino = run['sortino'] or 0
+        max_dd = run['max_dd'] or 0
+        win_rate = run['win_rate'] or 0
+        num_trades = run['num_trades'] or 0
+        run_date = (run['run_date'] or '')[:16]
+
+        ret_color = COLORS['green'] if ret >= 0 else COLORS['red']
+        sharpe_color = COLORS['green'] if sharpe >= 1.0 else COLORS['muted']
+
+        # Link to detail page (by strategy)
+        detail_file = f"backtest_{strategy_id.lower().replace('-', '')}.html"
+
+        table_rows.append(f'''
+            <tr data-strategy="{strategy_id}" data-return="{ret}" data-sharpe="{sharpe}" data-dd="{max_dd}">
+                <td><code>{run_id}</code></td>
+                <td><a href="{detail_file}" class="strategy-link">{strategy_id}</a></td>
+                <td style="color:{ret_color};font-weight:600;">{ret:+.1f}%</td>
+                <td style="color:{sharpe_color}">{sharpe:.2f}</td>
+                <td>{sortino:.2f}</td>
+                <td style="color:{COLORS['red']}">{max_dd:.1f}%</td>
+                <td>{win_rate:.0f}%</td>
+                <td>{num_trades}</td>
+                <td style="color:{COLORS['muted']}">{run_date}</td>
+                <td><a href="run_details.html?id={run_id}" class="view-btn">View</a></td>
+            </tr>
+        ''')
+
+    # Strategy filter options
+    strategy_options = ''.join(
+        f'<option value="{s["strategy_id"]}">{s["strategy_id"]} ({s["run_count"]} runs)</option>'
+        for s in strategies
+    )
+
+    html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Backtest Runs</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: {COLORS['bg']};
+            color: {COLORS['text']};
+            min-height: 100vh;
+            padding: 24px;
+        }}
+        .header {{
+            text-align: center;
+            margin-bottom: 24px;
+        }}
+        .header h1 {{
+            font-size: 1.8em;
+            margin-bottom: 8px;
+        }}
+        .header .subtitle {{
+            color: {COLORS['muted']};
+        }}
+        .nav {{
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 16px;
+        }}
+        .nav a {{
+            padding: 8px 16px;
+            background: rgba(245, 158, 11, 0.1);
+            color: {COLORS['orange']};
+            text-decoration: none;
+            border-radius: 6px;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            font-size: 0.85em;
+            transition: all 0.2s;
+        }}
+        .nav a:hover {{
+            background: rgba(245, 158, 11, 0.2);
+        }}
+        .nav a.active {{
+            background: {COLORS['orange']};
+            color: {COLORS['bg']};
+        }}
+
+        .container {{
+            max-width: 1600px;
+            margin: 0 auto;
+        }}
+
+        /* Stats bar */
+        .stats-bar {{
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            padding: 16px;
+            background: {COLORS['card']};
+            border-radius: 12px;
+            margin-bottom: 24px;
+            border: 1px solid {COLORS['border']};
+        }}
+        .stat {{
+            text-align: center;
+        }}
+        .stat-value {{
+            font-size: 1.5em;
+            font-weight: 700;
+        }}
+        .stat-label {{
+            font-size: 0.8em;
+            color: {COLORS['muted']};
+        }}
+
+        /* Filters */
+        .filters {{
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+        }}
+        .filter-group {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .filter-group label {{
+            font-size: 0.85em;
+            color: {COLORS['muted']};
+        }}
+        .filter-group select, .filter-group input {{
+            padding: 8px 12px;
+            background: {COLORS['card']};
+            border: 1px solid {COLORS['border']};
+            border-radius: 6px;
+            color: {COLORS['text']};
+            font-size: 0.9em;
+        }}
+        .filter-group input {{
+            width: 80px;
+        }}
+        .reset-btn {{
+            padding: 8px 16px;
+            background: {COLORS['card']};
+            border: 1px solid {COLORS['border']};
+            border-radius: 6px;
+            color: {COLORS['muted']};
+            cursor: pointer;
+            font-size: 0.85em;
+        }}
+        .reset-btn:hover {{
+            background: {COLORS['border']};
+            color: {COLORS['text']};
+        }}
+
+        /* Table */
+        .table-container {{
+            background: {COLORS['card']};
+            border-radius: 12px;
+            border: 1px solid {COLORS['border']};
+            overflow: hidden;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+        }}
+        th, td {{
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid {COLORS['border']};
+        }}
+        th {{
+            background: {COLORS['bg']};
+            color: {COLORS['muted']};
+            font-weight: 600;
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            user-select: none;
+            position: sticky;
+            top: 0;
+        }}
+        th:hover {{
+            color: {COLORS['text']};
+        }}
+        th.sorted-asc::after {{
+            content: ' ▲';
+            color: {COLORS['orange']};
+        }}
+        th.sorted-desc::after {{
+            content: ' ▼';
+            color: {COLORS['orange']};
+        }}
+        tbody tr:hover {{
+            background: rgba(255, 255, 255, 0.02);
+        }}
+        tbody tr.hidden {{
+            display: none;
+        }}
+        code {{
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.85em;
+            color: {COLORS['muted']};
+        }}
+        .strategy-link {{
+            color: {COLORS['blue']};
+            text-decoration: none;
+            font-weight: 600;
+        }}
+        .strategy-link:hover {{
+            text-decoration: underline;
+        }}
+        .view-btn {{
+            padding: 4px 12px;
+            background: rgba(59, 130, 246, 0.1);
+            color: {COLORS['blue']};
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.85em;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }}
+        .view-btn:hover {{
+            background: rgba(59, 130, 246, 0.2);
+        }}
+
+        .results-count {{
+            padding: 12px 16px;
+            color: {COLORS['muted']};
+            font-size: 0.85em;
+            border-top: 1px solid {COLORS['border']};
+        }}
+
+        .footer {{
+            text-align: center;
+            margin-top: 32px;
+            color: {COLORS['muted']};
+            font-size: 0.8em;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>All Backtest Runs</h1>
+        <div class="subtitle">{stats['total_runs']} runs across {stats['total_strategies']} strategies</div>
+        <div class="nav">
+            <a href="dashboard_backtest.html">Strategies</a>
+            <a href="dashboard_runs.html" class="active">All Runs</a>
+            <a href="dashboard.html">Dashboard</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="stats-bar">
+            <div class="stat">
+                <div class="stat-value">{stats['total_runs']}</div>
+                <div class="stat-label">Total Runs</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{stats['total_strategies']}</div>
+                <div class="stat-label">Strategies</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="filtered-count">{stats['total_runs']}</div>
+                <div class="stat-label">Showing</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label>Strategy:</label>
+                <select id="filter-strategy">
+                    <option value="">All Strategies</option>
+                    {strategy_options}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Min Sharpe:</label>
+                <input type="number" id="filter-sharpe" step="0.1" placeholder="0">
+            </div>
+            <div class="filter-group">
+                <label>Min Return:</label>
+                <input type="number" id="filter-return" step="1" placeholder="0">%
+            </div>
+            <div class="filter-group">
+                <label>Max DD:</label>
+                <input type="number" id="filter-dd" step="1" placeholder="-100">%
+            </div>
+            <button class="reset-btn" onclick="resetFilters()">Reset Filters</button>
+        </div>
+
+        <div class="table-container">
+            <table id="runs-table">
+                <thead>
+                    <tr>
+                        <th data-col="run_id">Run ID</th>
+                        <th data-col="strategy">Strategy</th>
+                        <th data-col="return" data-type="number">Return</th>
+                        <th data-col="sharpe" data-type="number">Sharpe</th>
+                        <th data-col="sortino" data-type="number">Sortino</th>
+                        <th data-col="dd" data-type="number">Max DD</th>
+                        <th data-col="winrate" data-type="number">Win Rate</th>
+                        <th data-col="trades" data-type="number">Trades</th>
+                        <th data-col="date">Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(table_rows)}
+                </tbody>
+            </table>
+            <div class="results-count">
+                Showing <span id="visible-count">{len(runs)}</span> of {len(runs)} runs
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Database: {stats['db_path']}</p>
+    </div>
+
+    <script>
+        // Sorting
+        let currentSort = {{ col: 'date', dir: 'desc' }};
+
+        document.querySelectorAll('th[data-col]').forEach(th => {{
+            th.addEventListener('click', () => {{
+                const col = th.dataset.col;
+                const isNumber = th.dataset.type === 'number';
+
+                // Toggle direction if same column
+                if (currentSort.col === col) {{
+                    currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+                }} else {{
+                    currentSort.col = col;
+                    currentSort.dir = 'desc';
+                }}
+
+                // Update header classes
+                document.querySelectorAll('th').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
+                th.classList.add(currentSort.dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+
+                // Sort rows
+                const tbody = document.querySelector('#runs-table tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+
+                rows.sort((a, b) => {{
+                    let aVal = a.children[getColIndex(col)].textContent.trim();
+                    let bVal = b.children[getColIndex(col)].textContent.trim();
+
+                    if (isNumber) {{
+                        aVal = parseFloat(aVal.replace(/[^-0-9.]/g, '')) || 0;
+                        bVal = parseFloat(bVal.replace(/[^-0-9.]/g, '')) || 0;
+                    }}
+
+                    if (currentSort.dir === 'asc') {{
+                        return aVal > bVal ? 1 : -1;
+                    }} else {{
+                        return aVal < bVal ? 1 : -1;
+                    }}
+                }});
+
+                rows.forEach(row => tbody.appendChild(row));
+            }});
+        }});
+
+        function getColIndex(col) {{
+            const map = {{ run_id: 0, strategy: 1, return: 2, sharpe: 3, sortino: 4, dd: 5, winrate: 6, trades: 7, date: 8 }};
+            return map[col] || 0;
+        }}
+
+        // Filtering
+        function applyFilters() {{
+            const strategyFilter = document.getElementById('filter-strategy').value;
+            const sharpeFilter = parseFloat(document.getElementById('filter-sharpe').value) || -Infinity;
+            const returnFilter = parseFloat(document.getElementById('filter-return').value) || -Infinity;
+            const ddFilter = parseFloat(document.getElementById('filter-dd').value) || -Infinity;
+
+            const rows = document.querySelectorAll('#runs-table tbody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {{
+                const strategy = row.dataset.strategy;
+                const ret = parseFloat(row.dataset.return);
+                const sharpe = parseFloat(row.dataset.sharpe);
+                const dd = parseFloat(row.dataset.dd);
+
+                const show = (
+                    (!strategyFilter || strategy === strategyFilter) &&
+                    sharpe >= sharpeFilter &&
+                    ret >= returnFilter &&
+                    dd >= ddFilter
+                );
+
+                row.classList.toggle('hidden', !show);
+                if (show) visibleCount++;
+            }});
+
+            document.getElementById('visible-count').textContent = visibleCount;
+            document.getElementById('filtered-count').textContent = visibleCount;
+        }}
+
+        function resetFilters() {{
+            document.getElementById('filter-strategy').value = '';
+            document.getElementById('filter-sharpe').value = '';
+            document.getElementById('filter-return').value = '';
+            document.getElementById('filter-dd').value = '';
+            applyFilters();
+        }}
+
+        // Attach filter listeners
+        ['filter-strategy', 'filter-sharpe', 'filter-return', 'filter-dd'].forEach(id => {{
+            document.getElementById(id).addEventListener('input', applyFilters);
+        }});
+    </script>
+</body>
+</html>
+'''
+    return html
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 
@@ -3015,10 +3456,24 @@ def main():
         detail_paths.append(detail_path)
         print(f"  Saved {filename}")
 
+    # Generate All Runs browser page (from database)
+    print("\nGenerating All Runs browser page...")
+    try:
+        runs_html = generate_runs_browser_page()
+        runs_path = DASHBOARDS_DIR / "dashboard_runs.html"
+        runs_path.write_text(runs_html)
+        print(f"  Saved dashboard_runs.html")
+    except Exception as e:
+        print(f"  ⚠ Skipped runs page: {e}")
+        runs_path = None
+
     # Summary
     print(f"\n{'=' * 60}")
-    print(f"Generated {len(results) + 1} dashboard pages:")
+    page_count = len(results) + 1 + (1 if runs_path else 0)
+    print(f"Generated {page_count} dashboard pages:")
     print(f"  Index:  {INDEX_PATH.name}")
+    if runs_path:
+        print(f"  Runs:   dashboard_runs.html")
     for p in detail_paths:
         print(f"  Detail: {p.name}")
 
