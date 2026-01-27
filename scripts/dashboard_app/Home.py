@@ -36,6 +36,16 @@ st.set_page_config(
 SIGNALS_DIR = PROJECT_ROOT / "data" / "signals"
 COINBASE_API = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
 
+# Helper function for rendering HTML (st.html is more reliable than st.markdown)
+def render_html(html: str):
+    """Render HTML using st.html for better compatibility."""
+    # st.html() was added in Streamlit 1.33+ and is more reliable
+    if hasattr(st, 'html'):
+        st.html(html)
+    else:
+        st.markdown(html, unsafe_allow_html=True)
+
+
 # Custom CSS for dark theme matching HTML dashboard
 st.markdown("""
 <style>
@@ -256,13 +266,13 @@ def zone_badge_html(zone: str, color: str) -> str:
 
 def render_pillar_header(icon: str, title: str, tells_us: str, metrics: str):
     """Render pillar section header."""
-    st.markdown(f"""
+    render_html(f"""
     <div class="pillar-header">
         <div class="pillar-title">{icon} {title}</div>
         <div class="pillar-tells"><span style="color:#f59e0b; font-weight:600;">What it tells us:</span> {tells_us}</div>
         <div class="pillar-metrics">Metrics: {metrics}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 # =============================================================================
@@ -277,7 +287,7 @@ def render_price_card(ctx: dict, live_price: float = None):
     zone = pc.get('zone', 'UNKNOWN')
     zone_color = pc.get('zone_color', '#6b7280')
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">📊 Price Levels</div>
         <div style="text-align:center; margin:16px 0;">
@@ -303,7 +313,7 @@ def render_price_card(ctx: dict, live_price: float = None):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_valuation_card(ctx: dict):
@@ -320,7 +330,7 @@ def render_valuation_card(ctx: dict):
     if mvrv_z is not None:
         thermo_pos = min(100, max(0, (mvrv_z + 1) / 5 * 100))
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">🌡️ Valuation</div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
@@ -355,7 +365,7 @@ def render_valuation_card(ctx: dict):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_profitability_card(ctx: dict):
@@ -375,7 +385,7 @@ def render_profitability_card(ctx: dict):
     if nupl is not None:
         nupl_pos = min(100, max(0, (nupl + 0.5) / 1.5 * 100))
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">💰 Profitability</div>
 
@@ -410,7 +420,7 @@ def render_profitability_card(ctx: dict):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_sopr_card(ctx: dict):
@@ -430,7 +440,7 @@ def render_sopr_card(ctx: dict):
     sopr_color = '#22c55e' if sopr_val and sopr_val < 1 else '#ef4444'
     pl_color = '#fbbf24' if pl_ratio and pl_ratio < 1 else '#22c55e'
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">💸 Spending Behavior</div>
 
@@ -470,7 +480,7 @@ def render_sopr_card(ctx: dict):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_supply_card(ctx: dict):
@@ -482,7 +492,7 @@ def render_supply_card(ctx: dict):
     state = supply.get('supply_state', 'UNKNOWN')
     state_color = supply.get('supply_state_color', '#6b7280')
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">📦 Supply Dynamics</div>
 
@@ -515,7 +525,7 @@ def render_supply_card(ctx: dict):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_liveliness_card(ctx: dict):
@@ -530,7 +540,7 @@ def render_liveliness_card(ctx: dict):
     live_pct = (liveliness * 100) if liveliness else 0
     vault_pct = (vaultedness * 100) if vaultedness else 0
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">⚡ Liveliness</div>
 
@@ -552,7 +562,7 @@ def render_liveliness_card(ctx: dict):
             High liveliness = active spending. High vaultedness = HODLing behavior.
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_miner_card(ctx: dict):
@@ -568,7 +578,7 @@ def render_miner_card(ctx: dict):
     if puell is not None:
         puell_pos = min(100, max(0, puell / 8 * 100))
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">⛏️ Miner Health</div>
 
@@ -590,7 +600,7 @@ def render_miner_card(ctx: dict):
             {zone_badge_html(puell_zone, puell_color)}
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_buy_the_dip_card(ctx: dict):
@@ -617,7 +627,7 @@ def render_buy_the_dip_card(ctx: dict):
             </div>
         '''
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">🛒 Buy The Dip</div>
 
@@ -634,7 +644,7 @@ def render_buy_the_dip_card(ctx: dict):
             James Check: 4+ conditions = strong buy signal
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_lth_distribution_card(ctx: dict):
@@ -661,7 +671,7 @@ def render_lth_distribution_card(ctx: dict):
     sopr_color = "#ef4444" if lth_sopr_triggered else "#6b7280"
     bg_color = "#7f1d1d" if both_triggered else "#1e293b"
 
-    st.markdown(f"""
+    render_html(f"""
     <div class="metric-card">
         <div class="card-title">💎 LTH Distribution</div>
 
@@ -696,7 +706,7 @@ def render_lth_distribution_card(ctx: dict):
             <div style="color:#f1f5f9; font-weight:500; font-size:0.9em;">{interpretation}</div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 # =============================================================================
@@ -731,18 +741,14 @@ def main():
         data_time = data_as_of
 
     # Header
-    st.markdown("""
+    render_html(f"""
     <div style="text-align:center; margin-bottom:32px;">
         <h1 style="font-size:2em; margin-bottom:8px;">₿ Bitcoin Trading Dashboard</h1>
         <div style="color:#6b7280; font-size:0.85em;">
-            Data as of: {data_time} | Calculated: {calc_time} {live_str}
+            Data as of: {data_time} | Calculated: {calc_time} {'| Live price enabled' if live_price else ''}
         </div>
     </div>
-    """.format(
-        data_time=data_time,
-        calc_time=calc_time,
-        live_str='| Live price enabled' if live_price else ''
-    ), unsafe_allow_html=True)
+    """)
 
     # PILLAR 1: VALUATION
     render_pillar_header(
@@ -808,12 +814,12 @@ def main():
 
     # TRADING SIGNALS SECTION
     st.markdown("---")
-    st.markdown("""
+    render_html("""
     <div style="text-align:center; margin:32px 0 24px 0;">
         <h2 style="font-size:1.6em; color:#f59e0b; margin-bottom:8px;">🎯 Trading Signals</h2>
         <p style="color:#9ca3af; font-size:0.9em;">James Check Framework entry/exit indicators</p>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -822,11 +828,11 @@ def main():
         render_lth_distribution_card(ctx)
 
     # Footer
-    st.markdown("""
+    render_html("""
     <div style="text-align:center; margin-top:32px; color:#6b7280; font-size:0.8em;">
         <p>James Check Framework — 6 Pillars of On-Chain Analysis</p>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 if __name__ == "__main__":
