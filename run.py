@@ -40,8 +40,6 @@ Usage:
     ./run.py dashboard --skip-hourly  # Skip hourly data sync (saves quota)
     ./run.py dashboard-quick      # Skip sync, just calculate and open dashboard
     ./run.py dashboard-quality    # Check data quality only
-    ./run.py dashboard-app        # Launch Streamlit dashboard app (multi-page)
-
     === BACKTEST DATABASE COMMANDS ===
     ./run.py backtest-stats       # Show database statistics
     ./run.py backtest-list        # List recent backtest runs
@@ -109,14 +107,12 @@ def print_usage():
     print("  dashboard         Full pipeline: sync all → quality checks → calculate → open")
     print("  dashboard-quick   Skip sync, just calculate and open dashboard")
     print("  dashboard-quality Check data freshness and quality only")
-    print("  dashboard-app     Launch Streamlit dashboard app (multi-page)")
     print("")
     print("  === BACKTEST DATABASE COMMANDS ===")
     print("  backtest-stats      Show database statistics")
     print("  backtest-list [N]   List recent N runs (default: 20)")
     print("  backtest-top [M] [N]  Top N runs by metric M (default: sharpe, 10)")
     print("  backtest-strategies Summary by strategy with best performance")
-    print("  backtest-gui        Launch Streamlit backtest GUI")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -348,18 +344,6 @@ if __name__ == "__main__":
             "--quality-only"
         ])
 
-    elif cmd == "dashboard-app":
-        """Launch Streamlit multi-page dashboard app"""
-        import subprocess
-        print("\n🚀 Launching Bitcoin Lab Dashboard...")
-        print("   Open http://localhost:8501 in your browser")
-        print("   Press Ctrl+C to stop\n")
-        subprocess.run([
-            sys.executable, "-m", "streamlit", "run",
-            "scripts/dashboard_app/Home.py",
-            "--server.headless", "true"
-        ])
-
     # === BACKTEST DATABASE COMMANDS ===
     elif cmd == "backtest-stats":
         """Show backtest database statistics"""
@@ -426,18 +410,6 @@ if __name__ == "__main__":
             last_run = (s['last_run'] or '')[:19]
             print(f"{s['strategy_id']:<15} {s['run_count']:>6} "
                   f"{best_ret:>+11.1f}% {best_sharpe:>12.2f} {last_run}")
-
-    elif cmd == "backtest-gui":
-        """Launch Streamlit backtest GUI"""
-        import subprocess
-        print("\n🚀 Launching Backtest GUI...")
-        print("   Open http://localhost:8501 in your browser")
-        print("   Press Ctrl+C to stop\n")
-        subprocess.run([
-            sys.executable, "-m", "streamlit", "run",
-            "scripts/backtest_gui.py",
-            "--server.headless", "true"
-        ])
 
     else:
         print(f"Unknown command: {cmd}\n")
