@@ -40,6 +40,7 @@ Usage:
     ./run.py dashboard --skip-hourly  # Skip hourly data sync (saves quota)
     ./run.py dashboard-quick      # Skip sync, just calculate and open dashboard
     ./run.py dashboard-quality    # Check data quality only
+    ./run.py dashboard-app        # Launch Streamlit dashboard app (multi-page)
 
     === BACKTEST DATABASE COMMANDS ===
     ./run.py backtest-stats       # Show database statistics
@@ -108,6 +109,7 @@ def print_usage():
     print("  dashboard         Full pipeline: sync all → quality checks → calculate → open")
     print("  dashboard-quick   Skip sync, just calculate and open dashboard")
     print("  dashboard-quality Check data freshness and quality only")
+    print("  dashboard-app     Launch Streamlit dashboard app (multi-page)")
     print("")
     print("  === BACKTEST DATABASE COMMANDS ===")
     print("  backtest-stats      Show database statistics")
@@ -344,6 +346,18 @@ if __name__ == "__main__":
             sys.executable,
             "scripts/sync_and_dashboard.py",
             "--quality-only"
+        ])
+
+    elif cmd == "dashboard-app":
+        """Launch Streamlit multi-page dashboard app"""
+        import subprocess
+        print("\n🚀 Launching Bitcoin Lab Dashboard...")
+        print("   Open http://localhost:8501 in your browser")
+        print("   Press Ctrl+C to stop\n")
+        subprocess.run([
+            sys.executable, "-m", "streamlit", "run",
+            "scripts/dashboard_app/Home.py",
+            "--server.headless", "true"
         ])
 
     # === BACKTEST DATABASE COMMANDS ===

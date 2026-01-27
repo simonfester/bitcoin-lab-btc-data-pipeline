@@ -993,6 +993,7 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
         </div>
         <div class="nav">
             <a href="dashboard_signals.html">🎯 Trading Signals</a>
+            <a href="dashboard_backtest.html">📈 Backtest Results</a>
             <a href="dashboard_quality.html">📊 Data Quality</a>
         </div>
     </div>
