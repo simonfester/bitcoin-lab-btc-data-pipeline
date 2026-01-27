@@ -5,11 +5,30 @@ VectorBT Strategy Backtester
 Run backtests on strategy config files and save results as sidecar files.
 
 Usage:
-    python backtest_vectorbt.py                      # Run all strategies
-    python backtest_vectorbt.py --strategy strat005  # Run specific strategy
-    python backtest_vectorbt.py --list               # List available strategies
-    python backtest_vectorbt.py --walk-forward       # Include walk-forward analysis
-    python backtest_vectorbt.py --debug              # Show detailed trades
+    python backtest_vectorbt.py --config my_strat.json  # Run from JSON file
+    python backtest_vectorbt.py --strategy strat005     # Run by strategy ID
+    python backtest_vectorbt.py --list                  # List available strategies
+    python backtest_vectorbt.py --all                   # Run all strategies
+    python backtest_vectorbt.py --walk-forward          # Include walk-forward analysis
+    python backtest_vectorbt.py --debug                 # Show detailed trades
+
+Strategy Config JSON Format:
+    {
+      "id": "MY-STRAT",
+      "name": "My Strategy Name",
+      "entry": {
+        "conditions": [
+          {"metric": "mvrv_sth", "operator": "<", "threshold": 1.0},
+          {"metric": "sopr_sth", "operator": "<", "threshold": 1.0}
+        ],
+        "required_conditions": 2
+      },
+      "exit": {
+        "conditions": [
+          {"metric": "mvrv", "operator": ">", "threshold": 2.5}
+        ]
+      }
+    }
 """
 
 import pandas as pd
@@ -118,6 +137,33 @@ def load_strategy_config(strategy_id: str) -> dict:
         except Exception:
             continue
     return None
+
+
+def load_strategy_from_file(filepath: str) -> dict:
+    """Load a strategy config directly from a JSON file path."""
+    path = Path(filepath)
+    if not path.exists():
+        print(f"✗ Config file not found: {filepath}")
+        return None
+    if not path.suffix == '.json':
+        print(f"✗ Config file must be JSON: {filepath}")
+        return None
+    try:
+        with open(path, 'r') as f:
+            config = json.load(f)
+        config['_path'] = path
+        # Ensure required fields
+        if 'id' not in config:
+            config['id'] = path.stem.upper()
+        if 'name' not in config:
+            config['name'] = path.stem.replace('_', ' ').title()
+        return config
+    except json.JSONDecodeError as e:
+        print(f"✗ Invalid JSON in {filepath}: {e}")
+        return None
+    except Exception as e:
+        print(f"✗ Error loading {filepath}: {e}")
+        return None
 
 
 def get_results_path(strategy_config: dict) -> Path:
@@ -1388,6 +1434,7 @@ def run_walk_forward_for_strategy(df: pd.DataFrame, strategy_config: dict, n_fol
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='VectorBT Strategy Backtester')
+    parser.add_argument('--config', '-c', type=str, help='Path to strategy config JSON file')
     parser.add_argument('--strategy', '-s', type=str, help='Strategy ID to backtest (e.g., strat005)')
     parser.add_argument('--list', '-l', action='store_true', help='List available strategies')
     parser.add_argument('--all', '-a', action='store_true', help='Run backtest for all strategies')
@@ -1420,7 +1467,23 @@ def main():
     # Load data
     df = load_all_data()
 
-    # Strategy-based backtest mode
+    # Config file mode (direct JSON file path)
+    if args.config:
+        config = load_strategy_from_file(args.config)
+        if not config:
+            return
+
+        print(f"\n📋 Strategy: {config.get('id', 'UNKNOWN')} - {config.get('name', 'Unknown')}")
+        results = run_strategy_backtest(config, df, include_walk_forward=args.walk_forward)
+
+        # Save to sidecar file
+        results_path = save_strategy_results(config, results)
+        print(f"\n{'=' * 80}")
+        print(f"✓ Results saved to: {results_path}")
+        print(f"{'=' * 80}")
+        return
+
+    # Strategy-based backtest mode (by ID)
     if args.strategy:
         config = load_strategy_config(args.strategy)
         if not config:
