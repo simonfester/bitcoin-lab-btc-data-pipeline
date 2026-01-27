@@ -23,6 +23,11 @@ from pathlib import Path
 from datetime import datetime
 import webbrowser
 import sys
+import os
+
+# Add project root to path for imports
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # =============================================================================
 # CONFIGURATION
