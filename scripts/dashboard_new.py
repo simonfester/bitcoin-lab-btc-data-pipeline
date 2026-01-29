@@ -41,15 +41,16 @@ COINBASE_API = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
 # DATA LOADING
 # =============================================================================
 
-def load_dashboard_context() -> dict:
+def load_dashboard_context(resolution: str = "daily") -> dict:
     """Load pre-computed dashboard context from JSON."""
-    context_path = SIGNALS_DIR / "dashboard_context.json"
+    suffix = "_hourly" if resolution == "hourly" else ""
+    context_path = SIGNALS_DIR / f"dashboard_context{suffix}.json"
     if not context_path.exists():
         raise FileNotFoundError(
             f"Dashboard context not found: {context_path}\n"
-            "Run 'python calculate.py' first to generate signals."
+            f"Run 'python calculate.py{' --resolution hourly' if resolution == 'hourly' else ''}' first."
         )
-    
+
     with open(context_path, 'r') as f:
         return json.load(f)
 
@@ -88,6 +89,24 @@ def format_number(val, decimals=2, prefix="", suffix=""):
     if abs(val) >= 1_000:
         return f"{prefix}{val/1_000:.2f}K{suffix}"
     return f"{prefix}{val:.{decimals}f}{suffix}"
+
+
+def format_btc_supply(val):
+    """Format BTC supply value (stored in satoshis) as human-readable BTC."""
+    if val is None:
+        return "N/A"
+    if isinstance(val, str):
+        try:
+            val = float(val)
+        except ValueError:
+            return val
+    # Convert from satoshis to BTC
+    btc = val / 1e8
+    if btc >= 1_000_000:
+        return f"{btc/1_000_000:.2f}M BTC"
+    if btc >= 1_000:
+        return f"{btc/1_000:.1f}K BTC"
+    return f"{btc:.0f} BTC"
 
 
 def format_price(val):
@@ -150,40 +169,63 @@ def metric_row(label: str, value, color: str = "#fff") -> str:
 # CARD GENERATORS
 # =============================================================================
 
-def generate_price_card(ctx: dict, live_price: float = None) -> str:
-    """Generate price levels card."""
+def generate_price_hero(ctx: dict, live_price: float = None) -> str:
+    """Generate full-width price hero section with price, changes, and levels."""
     pc = ctx['price_context']
     price = live_price or pc.get('price')
     levels = pc.get('levels', {})
     zone = pc.get('zone', 'UNKNOWN')
     zone_color = pc.get('zone_color', '#6b7280')
-    
-    # Price level rows
-    level_rows = ""
+    change_24h = pc.get('change_24h')
+    change_7d = pc.get('change_7d')
+
+    def change_html(val, label):
+        if val is None:
+            return f'<div style="color:#6b7280; font-size:0.85em;">{label}: N/A</div>'
+        color = '#22c55e' if val >= 0 else '#ef4444'
+        arrow = '\u25B2' if val >= 0 else '\u25BC'
+        return f'<div style="color:{color}; font-size:1.1em; font-weight:600;">{arrow} {val:+.1f}% <span style="color:#6b7280; font-weight:400; font-size:0.8em;">{label}</span></div>'
+
+    # Price level rows — horizontal bar with markers
     level_order = [
-        ('vaulted_price', 'Vaulted Price', '#a855f7'),
+        ('realized_price', 'Realized', '#ef4444'),
+        ('true_market_mean', 'True Mkt Mean', '#22c55e'),
         ('sth_realized_price', 'STH Realized', '#fbbf24'),
-        ('true_market_mean', 'True Market Mean', '#22c55e'),
-        ('realized_price', 'Realized Price', '#ef4444'),
+        ('vaulted_price', 'Vaulted', '#a855f7'),
     ]
-    
+
+    level_items = ""
     for key, label, color in level_order:
         val = levels.get(key)
         if val:
-            indicator = "◄" if price and abs(price - val) / val < 0.05 else ""
-            level_rows += metric_row(label, f"{format_price(val)} {indicator}", color)
-    
+            near = " ◄" if price and abs(price - val) / val < 0.05 else ""
+            level_items += f'''
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #1e293b;">
+                    <span style="color:{color}; font-weight:500;">{label}</span>
+                    <span style="color:#e2e8f0; font-weight:500;">{format_price(val)}{near}</span>
+                </div>'''
+
     return f'''
-        <div class="card">
-            <h3>📊 Price Levels</h3>
-            <div style="text-align:center; margin:16px 0;">
-                <div style="font-size:2.5em; font-weight:bold;">{format_price(price)}</div>
-                <div style="margin-top:8px;">
-                    {zone_badge(zone, zone_color)}
+        <div class="card" style="margin-bottom:24px; padding:24px 32px;">
+            <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:32px; align-items:center;">
+                <!-- Left: Price + Changes -->
+                <div>
+                    <div style="font-size:3em; font-weight:bold; letter-spacing:-1px;">{format_price(price)}</div>
+                    <div style="display:flex; gap:16px; margin-top:8px;">
+                        {change_html(change_24h, '24h')}
+                        {change_html(change_7d, '7d')}
+                    </div>
+                    <div style="margin-top:12px;">
+                        {zone_badge(zone, zone_color)}
+                    </div>
                 </div>
-            </div>
-            <div style="margin-top:16px;">
-                {level_rows}
+                <!-- Center: Divider -->
+                <div style="width:1px; height:100%; background:#334155;"></div>
+                <!-- Right: Price Levels -->
+                <div>
+                    <div style="color:#9ca3af; font-size:0.8em; margin-bottom:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">On-Chain Price Levels</div>
+                    {level_items}
+                </div>
             </div>
         </div>
     '''
@@ -204,7 +246,7 @@ def generate_valuation_card(ctx: dict) -> str:
         thermo_pos = min(100, max(0, (mvrv_z + 1) / 5 * 100))
     
     return f'''
-        <div class="card" style="grid-column: span 2;">
+        <div class="card">
             <h3>🌡️ Valuation</h3>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
                 <div>
@@ -376,8 +418,8 @@ def generate_supply_card(ctx: dict) -> str:
                 {zone_badge(state, state_color)}
             </div>
             
-            {metric_row('LTH Supply', format_number(supply.get('supply_lth'), 0))}
-            {metric_row('STH Supply', format_number(supply.get('supply_sth'), 0))}
+            {metric_row('LTH Supply', format_btc_supply(supply.get('supply_lth')))}
+            {metric_row('STH Supply', format_btc_supply(supply.get('supply_sth')))}
             {metric_row('LTH/STH Ratio', format_number(supply.get('lth_sth_ratio'), 2))}
         </div>
     '''
@@ -826,11 +868,14 @@ PILLARS = [
 ]
 
 
-def generate_pillar_header(pillar: dict) -> str:
+def generate_pillar_header(pillar: dict, is_daily_fallback: bool = False) -> str:
     """Generate HTML for pillar section header."""
+    fallback_badge = ''
+    if is_daily_fallback:
+        fallback_badge = ' <span style="background:#475569; color:#94a3b8; font-size:0.55em; padding:2px 6px; border-radius:3px; vertical-align:middle; margin-left:6px;">DAILY DATA</span>'
     return f'''
         <div class="pillar-header">
-            <div class="pillar-title">{pillar['icon']} {pillar['title']}</div>
+            <div class="pillar-title">{pillar['icon']} {pillar['title']}{fallback_badge}</div>
             <div class="pillar-tells">
                 <span class="tells-label">What it tells us:</span> {pillar['tells_us']}
             </div>
@@ -843,24 +888,240 @@ def generate_pillar_header(pillar: dict) -> str:
 # MAIN HTML GENERATION
 # =============================================================================
 
-def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
-    """Generate complete dashboard HTML organized by 6 pillars."""
-    
+def generate_pillar_content(ctx: dict, live_price: float = None, hourly_metrics: list = None) -> str:
+    """Generate the inner pillar content in a 2-column, 3-row grid.
+
+    Args:
+        hourly_metrics: List of metrics available at hourly resolution. When set,
+            pillars whose key metrics are NOT in this list get a "DAILY DATA" badge.
+    """
+    # Determine which pillars fall back to daily data when in hourly mode.
+    # Each pillar maps to the key metrics it needs at hourly resolution.
+    PILLAR_KEY_METRICS = {
+        0: {'price', 'mvrv', 'mvrv_z'},       # Valuation
+        1: {'nupl'},                            # Profitability
+        2: {'sopr', 'sopr_sth', 'sopr_lth'},   # Spending
+        3: {'supply_lth', 'supply_sth'},        # Supply
+        4: {'liveliness'},                      # Activity
+        5: {'puell_multiple'},                  # Miner
+    }
+
+    def is_fallback(pillar_idx: int) -> bool:
+        if not hourly_metrics:
+            return False
+        needed = PILLAR_KEY_METRICS.get(pillar_idx, set())
+        return not needed.intersection(set(hourly_metrics))
+
+    return f'''
+        <!-- Price Hero -->
+        {generate_price_hero(ctx, live_price)}
+
+        <div class="pillar-grid">
+            <!-- ROW 1: Valuation + Profitability -->
+            <div class="pillar-section">
+                {generate_pillar_header(PILLARS[0], is_fallback(0))}
+                {generate_valuation_card(ctx)}
+            </div>
+            <div class="pillar-section">
+                {generate_pillar_header(PILLARS[1], is_fallback(1))}
+                {generate_profitability_card(ctx)}
+            </div>
+
+            <!-- ROW 2: Spending + Supply -->
+            <div class="pillar-section">
+                {generate_pillar_header(PILLARS[2], is_fallback(2))}
+                {generate_sopr_card(ctx)}
+            </div>
+            <div class="pillar-section">
+                {generate_pillar_header(PILLARS[3], is_fallback(3))}
+                {generate_supply_card(ctx)}
+            </div>
+
+            <!-- ROW 3: Activity + Miner -->
+            <div class="pillar-section">
+                {generate_pillar_header(PILLARS[4], is_fallback(4))}
+                {generate_liveliness_card(ctx)}
+            </div>
+            <div class="pillar-section">
+                {generate_pillar_header(PILLARS[5], is_fallback(5))}
+                {generate_miner_card(ctx)}
+            </div>
+        </div>
+    '''
+
+
+def generate_dashboard_html(ctx: dict, live_price: float = None, hourly_ctx: dict = None) -> str:
+    """Generate complete dashboard HTML organized by 6 pillars.
+
+    If hourly_ctx is provided, renders both daily and hourly views
+    with a toggle button.
+    """
     meta = ctx.get('meta', {})
     calculated_at = meta.get('calculated_at', 'Unknown')
     data_as_of = meta.get('data_as_of', 'Unknown')
-    
+
     # Parse times for display
     try:
         calc_time = datetime.fromisoformat(calculated_at).strftime("%Y-%m-%d %H:%M")
     except:
         calc_time = calculated_at
-    
+
     try:
         data_time = datetime.fromisoformat(data_as_of).strftime("%Y-%m-%d")
     except:
         data_time = data_as_of
-    
+
+    # Check data staleness
+    stale_badge = ""
+    try:
+        data_dt = datetime.fromisoformat(data_as_of)
+        age_hours = (datetime.now() - data_dt).total_seconds() / 3600
+        if age_hours > 48:
+            stale_badge = f' | <span style="background:#ef4444; color:white; padding:1px 6px; border-radius:3px; font-size:0.85em;">STALE ({age_hours:.0f}h old)</span>'
+        elif age_hours > 24:
+            stale_badge = f' | <span style="background:#f97316; color:white; padding:1px 6px; border-radius:3px; font-size:0.85em;">STALE ({age_hours:.0f}h old)</span>'
+    except:
+        pass
+
+    has_hourly = hourly_ctx is not None
+
+    # Hourly metadata
+    hourly_meta_html = ""
+    hourly_data_time = ""
+    hourly_calc_time = ""
+    hourly_metrics_list = []
+    if has_hourly:
+        h_meta = hourly_ctx.get('meta', {})
+        hourly_metrics_list = h_meta.get('hourly_metrics', [])
+        try:
+            hourly_data_time = datetime.fromisoformat(h_meta.get('data_as_of', '')).strftime("%Y-%m-%d %H:%M")
+        except:
+            hourly_data_time = h_meta.get('data_as_of', 'Unknown')
+        try:
+            hourly_calc_time = datetime.fromisoformat(h_meta.get('calculated_at', '')).strftime("%Y-%m-%d %H:%M")
+        except:
+            hourly_calc_time = h_meta.get('calculated_at', 'Unknown')
+
+    # Toggle button HTML
+    toggle_html = ""
+    # Hourly staleness check
+    hourly_stale_badge = ""
+    if has_hourly:
+        try:
+            h_data_dt = datetime.fromisoformat(hourly_ctx.get('meta', {}).get('data_as_of', ''))
+            h_age_hours = (datetime.now() - h_data_dt).total_seconds() / 3600
+            if h_age_hours > 48:
+                hourly_stale_badge = f' | <span style="background:#ef4444; color:white; padding:1px 6px; border-radius:3px; font-size:0.85em;">STALE ({h_age_hours:.0f}h old)</span>'
+            elif h_age_hours > 24:
+                hourly_stale_badge = f' | <span style="background:#f97316; color:white; padding:1px 6px; border-radius:3px; font-size:0.85em;">STALE ({h_age_hours:.0f}h old)</span>'
+        except:
+            pass
+
+    if has_hourly:
+        toggle_html = f'''
+        <div class="resolution-toggle">
+            <button id="btn-daily" class="toggle-btn active" onclick="showResolution('daily')">Daily</button>
+            <button id="btn-hourly" class="toggle-btn" onclick="showResolution('hourly')">Hourly</button>
+        </div>
+        <div id="meta-daily" class="meta">
+            Data as of: {data_time} | Calculated: {calc_time}
+            {' | Live price enabled' if live_price else ''}{stale_badge}
+        </div>
+        <div id="meta-hourly" class="meta" style="display:none;">
+            Data as of: {hourly_data_time} | Calculated: {hourly_calc_time}
+            | H1 metrics: {', '.join(hourly_metrics_list) if hourly_metrics_list else 'none'}
+            {' | Live price enabled' if live_price else ''}{hourly_stale_badge}
+        </div>
+        '''
+    else:
+        toggle_html = f'''
+        <div class="meta">
+            Data as of: {data_time} | Calculated: {calc_time}
+            {' | Live price enabled' if live_price else ''}{stale_badge}
+        </div>
+        '''
+
+    # Generate both content blocks
+    daily_content = generate_pillar_content(ctx, live_price)
+    hourly_content = generate_pillar_content(hourly_ctx, live_price, hourly_metrics=hourly_metrics_list) if has_hourly else ""
+
+    # Toggle styles
+    toggle_css = '''
+        .resolution-toggle {
+            display: inline-flex;
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 12px;
+            border: 1px solid #334155;
+        }
+        .toggle-btn {
+            padding: 8px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: transparent;
+            color: #6b7280;
+        }
+        .toggle-btn.active {
+            background: #f59e0b;
+            color: #0f172a;
+        }
+        .toggle-btn:hover:not(.active) {
+            color: #f1f5f9;
+        }
+        .h1-badge {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            font-size: 0.65em;
+            padding: 1px 5px;
+            border-radius: 3px;
+            vertical-align: middle;
+            margin-left: 4px;
+            font-weight: 600;
+        }
+    '''
+
+    # Toggle JS
+    toggle_js = '''
+    <script>
+    function showResolution(res) {
+        var daily = document.getElementById('content-daily');
+        var hourly = document.getElementById('content-hourly');
+        var btnDaily = document.getElementById('btn-daily');
+        var btnHourly = document.getElementById('btn-hourly');
+        var metaDaily = document.getElementById('meta-daily');
+        var metaHourly = document.getElementById('meta-hourly');
+
+        if (res === 'hourly' && hourly) {
+            daily.style.display = 'none';
+            hourly.style.display = 'block';
+            btnDaily.classList.remove('active');
+            btnHourly.classList.add('active');
+            if (metaDaily) metaDaily.style.display = 'none';
+            if (metaHourly) metaHourly.style.display = 'block';
+        } else {
+            daily.style.display = 'block';
+            if (hourly) hourly.style.display = 'none';
+            btnDaily.classList.add('active');
+            if (btnHourly) btnHourly.classList.remove('active');
+            if (metaDaily) metaDaily.style.display = 'block';
+            if (metaHourly) metaHourly.style.display = 'none';
+        }
+    }
+    </script>
+    ''' if has_hourly else ''
+
+    hourly_block = f'''
+        <div id="content-hourly" style="display:none;">
+            {hourly_content}
+        </div>
+    ''' if has_hourly else ''
+
     html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -907,12 +1168,28 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
             background: rgba(245, 158, 11, 0.2);
             transform: translateY(-2px);
         }}
+        {toggle_css}
         .container {{
             max-width: 1600px;
             margin: 0 auto;
         }}
+        .pillar-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }}
+        @media (max-width: 1024px) {{
+            .pillar-grid {{
+                grid-template-columns: 1fr;
+            }}
+        }}
         .pillar-section {{
-            margin-bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0;
+        }}
+        .pillar-section .card:last-child {{
+            flex: 1;
         }}
         .pillar-header {{
             margin-bottom: 16px;
@@ -942,10 +1219,11 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
             font-size: 0.8em;
             font-style: italic;
         }}
-        .grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 20px;
+        .pillar-section .card {{
+            margin-bottom: 12px;
+        }}
+        .pillar-section .card:last-child {{
+            margin-bottom: 0;
         }}
         .card {{
             background: #1e293b;
@@ -987,10 +1265,7 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
 <body>
     <div class="header">
         <h1>₿ Bitcoin Trading Dashboard</h1>
-        <div class="meta">
-            Data as of: {data_time} | Calculated: {calc_time}
-            {' | Live price enabled' if live_price else ''}
-        </div>
+        {toggle_html}
         <div class="nav">
             <a href="dashboard_signals.html">🎯 Trading Signals</a>
             <a href="dashboard_backtest.html">📈 Backtest Results</a>
@@ -999,59 +1274,16 @@ def generate_dashboard_html(ctx: dict, live_price: float = None) -> str:
     </div>
 
     <div class="container">
-        <!-- PILLAR 1: VALUATION -->
-        <div class="pillar-section">
-            {generate_pillar_header(PILLARS[0])}
-            <div class="grid">
-                {generate_price_card(ctx, live_price)}
-                {generate_valuation_card(ctx)}
-            </div>
+        <div id="content-daily">
+            {daily_content}
         </div>
-        
-        <!-- PILLAR 2: PROFITABILITY -->
-        <div class="pillar-section">
-            {generate_pillar_header(PILLARS[1])}
-            <div class="grid">
-                {generate_profitability_card(ctx)}
-            </div>
-        </div>
-        
-        <!-- PILLAR 3: SPENDING BEHAVIOR -->
-        <div class="pillar-section">
-            {generate_pillar_header(PILLARS[2])}
-            <div class="grid">
-                {generate_sopr_card(ctx)}
-            </div>
-        </div>
-        
-        <!-- PILLAR 4: SUPPLY DISTRIBUTION -->
-        <div class="pillar-section">
-            {generate_pillar_header(PILLARS[3])}
-            <div class="grid">
-                {generate_supply_card(ctx)}
-            </div>
-        </div>
-        
-        <!-- PILLAR 5: ACTIVITY -->
-        <div class="pillar-section">
-            {generate_pillar_header(PILLARS[4])}
-            <div class="grid">
-                {generate_liveliness_card(ctx)}
-            </div>
-        </div>
-        
-        <!-- PILLAR 6: MINER HEALTH -->
-        <div class="pillar-section">
-            {generate_pillar_header(PILLARS[5])}
-            <div class="grid">
-                {generate_miner_card(ctx)}
-            </div>
-        </div>
+        {hourly_block}
     </div>
-    
+
     <div class="footer">
         <p>James Check Framework — 6 Pillars of On-Chain Analysis | Run <code>python scripts/calculate.py</code> to update</p>
     </div>
+    {toggle_js}
 </body>
 </html>
 '''
@@ -1076,11 +1308,20 @@ def main():
     # Load pre-computed context
     print("\nLoading signals...")
     try:
-        ctx = load_dashboard_context()
-        print("  ✓ Dashboard context loaded")
+        ctx = load_dashboard_context("daily")
+        print("  ✓ Daily dashboard context loaded")
     except FileNotFoundError as e:
         print(f"❌ {e}")
         return
+
+    # Try loading hourly context (optional)
+    hourly_ctx = None
+    try:
+        hourly_ctx = load_dashboard_context("hourly")
+        h_metrics = hourly_ctx.get('meta', {}).get('hourly_metrics', [])
+        print(f"  ✓ Hourly dashboard context loaded ({len(h_metrics)} h1 metrics)")
+    except FileNotFoundError:
+        print("  - No hourly context (run: python scripts/calculate.py --resolution hourly)")
     
     # Optionally fetch live price
     live_price = None
@@ -1094,7 +1335,7 @@ def main():
     
     # Generate HTML
     print("\nGenerating dashboard...")
-    html = generate_dashboard_html(ctx, live_price)
+    html = generate_dashboard_html(ctx, live_price, hourly_ctx=hourly_ctx)
     
     # Write to file
     OUTPUT_PATH.write_text(html)
@@ -1111,9 +1352,13 @@ def main():
         while True:
             time.sleep(60)
             try:
-                ctx = load_dashboard_context()
+                ctx = load_dashboard_context("daily")
+                try:
+                    hourly_ctx = load_dashboard_context("hourly")
+                except FileNotFoundError:
+                    hourly_ctx = None
                 live_price, _ = get_live_price() if '--no-live' not in sys.argv else (None, None)
-                html = generate_dashboard_html(ctx, live_price)
+                html = generate_dashboard_html(ctx, live_price, hourly_ctx=hourly_ctx)
                 OUTPUT_PATH.write_text(html)
                 print(f"  ✓ Refreshed at {datetime.now().strftime('%H:%M:%S')}")
             except KeyboardInterrupt:

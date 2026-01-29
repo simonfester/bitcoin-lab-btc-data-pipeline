@@ -1124,6 +1124,199 @@ def generate_monte_carlo_section(data: dict) -> str:
 
 
 # =============================================================================
+# RANDOM FORWARD TESTING VISUALIZATION
+# =============================================================================
+
+def generate_random_forward_histogram_svg(rft_data: dict, width: int = 350, height: int = 180) -> str:
+    """Generate SVG histogram of random forward test return distribution."""
+    if not rft_data:
+        return f'<div style="color:#9ca3af;text-align:center;padding:20px;">No random forward data</div>'
+
+    splits = rft_data.get('splits', [])
+    if not splits:
+        return f'<div style="color:#9ca3af;text-align:center;padding:20px;">No splits data</div>'
+
+    returns = [s['return_pct'] for s in splits]
+    stats = rft_data.get('statistics', {})
+
+    # Create histogram bins
+    n_bins = min(15, len(returns))
+    min_val = min(returns)
+    max_val = max(returns)
+    bin_width = (max_val - min_val) / n_bins if max_val > min_val else 1
+
+    bins = [0] * n_bins
+    for r in returns:
+        idx = min(int((r - min_val) / bin_width), n_bins - 1)
+        bins[idx] += 1
+
+    max_count = max(bins) if bins else 1
+
+    # SVG dimensions
+    margin = {'top': 20, 'right': 20, 'bottom': 40, 'left': 45}
+    inner_width = width - margin['left'] - margin['right']
+    inner_height = height - margin['top'] - margin['bottom']
+
+    bar_width = inner_width / n_bins - 2
+
+    svg_parts = [f'<svg viewBox="0 0 {width} {height}" style="width:100%;max-width:{width}px;">']
+
+    # Draw bars
+    for i, count in enumerate(bins):
+        bin_start = min_val + i * bin_width
+        bar_height = (count / max_count) * inner_height if max_count > 0 else 0
+        x = margin['left'] + i * (inner_width / n_bins) + 1
+        y = margin['top'] + inner_height - bar_height
+
+        # Color: green for positive, red for negative
+        bar_color = COLORS['green'] if bin_start >= 0 else COLORS['red']
+
+        svg_parts.append(f'''
+            <rect x="{x}" y="{y}" width="{bar_width}" height="{bar_height}"
+                  fill="{bar_color}" opacity="0.7" rx="2"/>
+        ''')
+
+    # Draw zero line if range spans zero
+    if min_val < 0 < max_val:
+        zero_x = margin['left'] + ((0 - min_val) / (max_val - min_val)) * inner_width
+        svg_parts.append(f'''
+            <line x1="{zero_x}" y1="{margin['top']}" x2="{zero_x}" y2="{margin['top'] + inner_height}"
+                  stroke="{COLORS['muted']}" stroke-width="2" stroke-dasharray="4,2"/>
+        ''')
+
+    # X-axis labels
+    for i in range(0, n_bins + 1, max(1, n_bins // 4)):
+        val = min_val + i * bin_width
+        x = margin['left'] + i * (inner_width / n_bins)
+        svg_parts.append(f'''
+            <text x="{x}" y="{height - 8}" text-anchor="middle"
+                  fill="{COLORS['muted']}" font-size="10">{val:.0f}%</text>
+        ''')
+
+    # Y-axis label
+    svg_parts.append(f'''
+        <text x="{margin['left'] - 35}" y="{margin['top'] + inner_height/2}"
+              text-anchor="middle" transform="rotate(-90, {margin['left'] - 35}, {margin['top'] + inner_height/2})"
+              fill="{COLORS['muted']}" font-size="11">Count</text>
+    ''')
+
+    # Title
+    svg_parts.append(f'''
+        <text x="{width/2}" y="12" text-anchor="middle"
+              fill="{COLORS['text']}" font-size="11" font-weight="bold">Return Distribution Across Splits</text>
+    ''')
+
+    svg_parts.append('</svg>')
+    return "\n".join(svg_parts)
+
+
+def generate_random_forward_card(result: dict, color: str) -> str:
+    """Generate Random Forward Testing results card."""
+    rft = result.get('random_forward')
+    strategy_id = result.get('strategy_id', 'Unknown')
+
+    if not rft or rft.get('n_splits', 0) < 3:
+        return f'''
+            <div class="card">
+                <h3 style="border-left:4px solid {color};padding-left:12px;">Random Forward: {strategy_id}</h3>
+                <div style="color:{COLORS['muted']};text-align:center;padding:20px;">
+                    Not enough data for random forward testing
+                </div>
+            </div>
+        '''
+
+    stats = rft.get('statistics', {})
+    n_splits = rft.get('n_splits', 0)
+
+    return_mean = stats.get('return_mean', 0)
+    return_std = stats.get('return_std', 0)
+    return_5th = stats.get('return_5th', 0)
+    return_95th = stats.get('return_95th', 0)
+    pct_profitable = stats.get('pct_profitable', 0)
+    pct_beats_bh = stats.get('pct_beats_bh', 0)
+    dd_mean = stats.get('dd_mean', 0)
+    trades_mean = stats.get('trades_mean', 0)
+    win_rate_mean = stats.get('win_rate_mean', 0)
+
+    # Robustness grade
+    if pct_profitable >= 80 and pct_beats_bh >= 50:
+        grade = "A"
+        grade_color = COLORS['green']
+        grade_desc = "Excellent"
+    elif pct_profitable >= 70 and pct_beats_bh >= 40:
+        grade = "B"
+        grade_color = "#22c55e"
+        grade_desc = "Good"
+    elif pct_profitable >= 60:
+        grade = "C"
+        grade_color = COLORS['orange']
+        grade_desc = "Fair"
+    else:
+        grade = "D"
+        grade_color = COLORS['red']
+        grade_desc = "Poor"
+
+    return f'''
+        <div class="card">
+            <h3 style="border-left:4px solid {color};padding-left:12px;">Random Forward: {strategy_id}</h3>
+
+            <div style="display:flex;gap:16px;margin-bottom:16px;">
+                <div style="flex:1;">
+                    <div style="font-size:0.8em;color:{COLORS['muted']};margin-bottom:8px;text-align:center;">Return Distribution ({n_splits} splits)</div>
+                    {generate_random_forward_histogram_svg(rft)}
+                </div>
+                <div style="flex:1;">
+                    <div class="mc-stats">
+                        <div class="mc-stat-row">
+                            <span class="mc-label">Splits Tested</span>
+                            <span class="mc-value">{n_splits}</span>
+                        </div>
+                        <div class="mc-stat-row">
+                            <span class="mc-label">Mean Return</span>
+                            <span class="mc-value" style="color:{COLORS['green'] if return_mean > 0 else COLORS['red']}">{return_mean:+.1f}%</span>
+                        </div>
+                        <div class="mc-stat-row">
+                            <span class="mc-label">Return Range (5-95%)</span>
+                            <span class="mc-value">{return_5th:.0f}% to {return_95th:.0f}%</span>
+                        </div>
+                        <div class="mc-stat-row">
+                            <span class="mc-label">Profitable Splits</span>
+                            <span class="mc-value" style="color:{COLORS['green'] if pct_profitable >= 60 else COLORS['red']}">{pct_profitable:.0f}%</span>
+                        </div>
+                        <div class="mc-stat-row">
+                            <span class="mc-label">Beats Buy & Hold</span>
+                            <span class="mc-value" style="color:{COLORS['green'] if pct_beats_bh >= 50 else COLORS['orange']}">{pct_beats_bh:.0f}%</span>
+                        </div>
+                        <div class="mc-stat-row">
+                            <span class="mc-label">Avg Trades/Split</span>
+                            <span class="mc-value">{trades_mean:.0f}</span>
+                        </div>
+                        <div class="mc-stat-row">
+                            <span class="mc-label">Avg Win Rate</span>
+                            <span class="mc-value">{win_rate_mean:.0f}%</span>
+                        </div>
+                        <div class="mc-stat-row">
+                            <span class="mc-label">Avg Max DD</span>
+                            <span class="mc-value">{dd_mean:.1f}%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:16px;background:{COLORS['bg']};border-radius:8px;">
+                <div style="font-size:2.5em;font-weight:bold;color:{grade_color};">{grade}</div>
+                <div>
+                    <div style="font-size:1.1em;font-weight:bold;color:{grade_color};">{grade_desc} Robustness</div>
+                    <div style="font-size:0.75em;color:{COLORS['muted']};margin-top:4px;">
+                        Strategy profitable in {pct_profitable:.0f}% of random time periods
+                    </div>
+                </div>
+            </div>
+        </div>
+    '''
+
+
+# =============================================================================
 # WALK-FORWARD VISUALIZATION
 # =============================================================================
 
@@ -1706,12 +1899,14 @@ def generate_detail_page(result: dict, idx: int = 0) -> str:
             "test": result.get('test', {}),
             "equity_curve": result.get('equity_curve', []),
             "trades": result.get('trades', []),
-            "monte_carlo": result.get('monte_carlo', None)
+            "monte_carlo": result.get('monte_carlo', None),
+            "random_forward": result.get('random_forward', None)
         }],
         "benchmark": result.get('benchmark', {}),
         "train_period": result.get('train_period', {}),
         "test_period": result.get('test_period', {}),
         "run_date": result.get('run_date', ''),
+        "random_forward": result.get('random_forward', None),
         "position_sizing": result.get('position_sizing', {}),
         "exit_strategy": result.get('exit_strategy', '')
     }
@@ -1738,6 +1933,10 @@ def generate_detail_page_html(data: dict, wf_data: dict, strategy_id: str, strat
 
     # Generate Monte Carlo card
     mc_card = generate_monte_carlo_card(strategies[0], color) if strategies else ""
+
+    # Generate Random Forward Testing card
+    rft_data = {'strategy_id': strategy_id, 'random_forward': data.get('random_forward')}
+    rft_card = generate_random_forward_card(rft_data, color) if data else ""
 
     # Generate interactive trade chart section
     trade_chart_section = ""
@@ -2293,6 +2492,17 @@ def generate_detail_page_html(data: dict, wf_data: dict, strategy_id: str, strat
             </div>
             <div class="grid">
                 {mc_card}
+            </div>
+        </div>
+
+        <!-- Random Forward Testing Section -->
+        <div class="mc-section">
+            <div class="mc-section-header">
+                <h2>Random Forward Testing</h2>
+                <p>Testing if strategy works across different random time periods (20 splits)</p>
+            </div>
+            <div class="grid">
+                {rft_card}
             </div>
         </div>
 

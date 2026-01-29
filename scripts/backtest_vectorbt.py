@@ -85,11 +85,22 @@ FEES = 0.001  # 0.1%
 SLIPPAGE = 0.001  # 0.1%
 INIT_CASH = 100000  # Starting portfolio value
 
-# Position Sizing (Risk-Based)
+# Position Sizing (Risk-Based) - Defaults, can be overridden in strategy config
 RISK_PER_TRADE = 0.02  # 2% of portfolio risked per trade
 STOP_LOSS_PCT = 0.10   # 10% stop-loss below entry
 # Position size = (Portfolio * RISK_PER_TRADE) / STOP_LOSS_PCT
 # Example: $10,000 * 0.02 / 0.10 = $2,000 position (20% of portfolio)
+
+# Valid resolutions
+VALID_RESOLUTIONS = ['daily', 'd1', 'h1', 'h4', 'h8', 'h12']
+RESOLUTION_FREQ_MAP = {
+    'daily': '1D', 'd1': '1D',
+    'h1': '1h', 'h4': '4h', 'h8': '8h', 'h12': '12h'
+}
+
+# Smoothing configuration (matches calculate.py)
+VALID_SMOOTHING_WINDOWS = [4, 6, 8, 12]
+SMOOTH_COLUMNS = ['sopr', 'sopr_sth', 'sopr_lth', 'mvrv', 'mvrv_sth', 'realized_loss']
 
 
 # =============================================================================
@@ -169,9 +180,11 @@ def load_strategy_from_file(filepath: str) -> dict:
 def get_results_path(strategy_config: dict) -> Path:
     """Get the sidecar results file path for a strategy."""
     config_path = strategy_config.get('_path')
+    smoothing = strategy_config.get('_smoothing_window')
+    suffix = f"_ma{smoothing}" if smoothing else ""
     if config_path:
-        return config_path.parent / f"{config_path.stem}_results.json"
-    return STRATEGIES_DIR / f"unknown_results.json"
+        return config_path.parent / f"{config_path.stem}_results{suffix}.json"
+    return STRATEGIES_DIR / f"unknown_results{suffix}.json"
 
 
 def save_strategy_results(strategy_config: dict, results: dict, save_to_db: bool = True) -> Path:
@@ -260,9 +273,139 @@ def load_metric(name: str, source: str = "brk") -> pd.Series:
     return pd.Series(dtype=float)
 
 
+def load_data_for_resolution(resolution: str = 'daily') -> pd.DataFrame:
+    """
+    Load data for a specific resolution.
+
+    Args:
+        resolution: 'daily', 'd1', 'h1', 'h4', 'h8', 'h12'
+
+    Returns:
+        DataFrame with metrics for that resolution
+    """
+    resolution = resolution.lower()
+    if resolution not in VALID_RESOLUTIONS:
+        print(f"⚠ Invalid resolution '{resolution}', using 'daily'")
+        resolution = 'daily'
+
+    print(f"\nLoading {resolution} data...")
+
+    # Map resolution to data directory
+    if resolution in ['daily', 'd1']:
+        # Daily data from BRK (free)
+        return load_all_data()  # Use existing function
+    else:
+        # Hourly data from Bitcoin Lab
+        res_dir = {
+            'h1': PROJECT_ROOT / 'data' / 'bl' / 'hourly',
+            'h4': PROJECT_ROOT / 'data' / 'bl' / 'h4',
+            'h8': PROJECT_ROOT / 'data' / 'bl' / 'h8',
+            'h12': PROJECT_ROOT / 'data' / 'bl' / 'h12'
+        }.get(resolution)
+
+        if not res_dir or not res_dir.exists():
+            print(f"✗ Data directory not found for {resolution}: {res_dir}")
+            print("  Run: python run.py bl-sync-hourly (or bl-sync-h4, etc.)")
+            return pd.DataFrame()
+
+        # Load available metrics from Bitcoin Lab hourly
+        df_dict = {}
+        bl_metrics = [
+            'price', 'sopr', 'sopr_sth', 'sopr_lth', 'realized_loss',
+            'mvrv', 'mvrv_sth', 'realized_profit'  # Also available at hourly
+        ]
+
+        for metric in bl_metrics:
+            path = res_dir / f"{metric}.parquet"
+            if path.exists():
+                df = pd.read_parquet(path)
+                if 'time' in df.columns:
+                    df['time'] = pd.to_datetime(df['time'])
+                    df = df.set_index('time')
+                if 'value' in df.columns:
+                    df_dict[metric] = df['value']
+                elif len(df.columns) == 1:
+                    df_dict[metric] = df.iloc[:, 0]
+                print(f"  ✓ {metric}")
+            else:
+                print(f"  ✗ {metric} (missing)")
+
+        if not df_dict:
+            print(f"✗ No data found for resolution {resolution}")
+            return pd.DataFrame()
+
+        df = pd.DataFrame(df_dict)
+        df = df.sort_index()
+
+        # For hourly data, load remaining daily-only metrics and forward-fill
+        # Note: mvrv, mvrv_sth, realized_profit now loaded from hourly above
+        daily_metrics = [
+            'mvrv_lth',                       # LTH MVRV (daily only)
+            'nupl', 'puell_multiple',         # Other indicators (daily only)
+            'price_200d_sma'                  # For momentum exit (daily only)
+        ]
+        # Derivatives from Glassnode (for Buy The Dip signals)
+        derivatives_metrics = ['funding', 'liq_long', 'liq_short']
+
+        for metric in daily_metrics:
+            daily_series = load_metric(metric, 'brk')
+            if not daily_series.empty:
+                # Reindex to hourly and forward-fill
+                df[metric] = daily_series.reindex(df.index, method='ffill')
+                print(f"  ✓ {metric} (daily→{resolution})")
+
+        # Load derivatives from Glassnode
+        # Try hourly first, fall back to daily forward-fill
+        deriv_file_map = {
+            'funding': 'funding_rate',
+            'liq_long': 'liquidations_long',
+            'liq_short': 'liquidations_short'
+        }
+        glassnode_hourly_dir = PROJECT_ROOT / 'data' / 'glassnode' / 'hourly'
+
+        for col_name, file_name in deriv_file_map.items():
+            hourly_path = glassnode_hourly_dir / f"{file_name}.parquet"
+            if hourly_path.exists():
+                # Load hourly derivatives
+                deriv_df = pd.read_parquet(hourly_path)
+                if 'time' in deriv_df.columns:
+                    deriv_df['time'] = pd.to_datetime(deriv_df['time'])
+                    deriv_df = deriv_df.set_index('time')
+                if 'value' in deriv_df.columns:
+                    df[col_name] = deriv_df['value'].reindex(df.index, method='ffill')
+                elif len(deriv_df.columns) == 1:
+                    df[col_name] = deriv_df.iloc[:, 0].reindex(df.index, method='ffill')
+                print(f"  ✓ {col_name} (hourly)")
+            else:
+                # Fall back to daily forward-fill
+                daily_series = load_metric(file_name, 'glassnode')
+                if not daily_series.empty:
+                    df[col_name] = daily_series.reindex(df.index, method='ffill')
+                    print(f"  ✓ {col_name} (daily→{resolution})")
+
+        # Filter to only dates where all Buy The Dip metrics have valid data
+        # This prevents false signals before derivatives data starts (2020-02-02 for funding)
+        btd_required_cols = ['mvrv_sth', 'sopr_sth', 'realized_profit', 'realized_loss',
+                             'funding', 'liq_long', 'liq_short']
+        available_cols = [c for c in btd_required_cols if c in df.columns]
+
+        if available_cols:
+            has_all_data = df[available_cols].notna().all(axis=1)
+            df_filtered = df[has_all_data].copy()
+
+            print(f"\nData loaded: {len(df)} bars from {df.index[0]} to {df.index[-1]}")
+            if len(df_filtered) < len(df):
+                print(f"Valid data (all metrics): {len(df_filtered)} bars from {df_filtered.index[0]} to {df_filtered.index[-1]}")
+
+            return df_filtered
+
+        print(f"\nData loaded: {len(df)} bars from {df.index[0]} to {df.index[-1]}")
+        return df
+
+
 def load_all_data() -> pd.DataFrame:
-    """Load all metrics into aligned DataFrame."""
-    print("\nLoading data...")
+    """Load all daily metrics into aligned DataFrame."""
+    print("\nLoading daily data...")
 
     metrics = {
         'price': ('price', 'brk'),
@@ -309,6 +452,36 @@ def load_all_data() -> pd.DataFrame:
 
 
 # =============================================================================
+# DATA SMOOTHING
+# =============================================================================
+
+def apply_smoothing(df: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Apply rolling MA smoothing to key signal-driving columns.
+
+    Only smooths columns listed in SMOOTH_COLUMNS. Other columns pass through
+    unchanged. Uses min_periods=window//2 to avoid excessive NaN at start.
+
+    Args:
+        df: DataFrame with metric columns
+        window: Rolling window size (in bars — hours for hourly, days for daily)
+
+    Returns:
+        New DataFrame with smoothed columns
+    """
+    result = df.copy()
+    smoothed_count = 0
+    for col in SMOOTH_COLUMNS:
+        if col in result.columns:
+            result[col] = result[col].rolling(window, min_periods=max(1, window // 2)).mean()
+            smoothed_count += 1
+    print(f"  Applied MA-{window} smoothing to {smoothed_count} columns: "
+          f"{[c for c in SMOOTH_COLUMNS if c in result.columns]}")
+    # Drop rows where smoothed columns became NaN
+    result = result.dropna(subset=[c for c in SMOOTH_COLUMNS if c in result.columns])
+    return result
+
+
+# =============================================================================
 # SIGNAL GENERATION (NO LOOK-AHEAD BIAS)
 # =============================================================================
 
@@ -319,12 +492,16 @@ def calculate_rolling_zscore(series: pd.Series, window: int) -> pd.Series:
     return (series - mean) / std
 
 
-def generate_buy_the_dip_entries(df: pd.DataFrame) -> pd.Series:
+def generate_buy_the_dip_entries(df: pd.DataFrame, threshold: int = 4) -> pd.Series:
     """
     Generate Buy The Dip entry signals.
     CRITICAL: Each row only uses data available UP TO that date.
+
+    Args:
+        df: DataFrame with required metrics
+        threshold: Number of conditions required (default 4 out of 5)
     """
-    print("\nGenerating Buy The Dip signals...")
+    print(f"\nGenerating Buy The Dip signals ({threshold}/5 threshold)...")
 
     # Condition 1: STH-MVRV < 1.0
     c1 = df['mvrv_sth'] < 1.0
@@ -346,8 +523,8 @@ def generate_buy_the_dip_entries(df: pd.DataFrame) -> pd.Series:
     # Count conditions
     count = c1.astype(int) + c2.astype(int) + c3.astype(int) + c4.astype(int) + c5.astype(int)
 
-    # Entry when 4+ conditions met
-    entries = count >= 4
+    # Entry when threshold+ conditions met
+    entries = count >= threshold
 
     print(f"  Generated {entries.sum()} entry signals")
 
@@ -365,19 +542,43 @@ def generate_lth_distribution_exits(df: pd.DataFrame) -> pd.Series:
     return exits
 
 
-def generate_momentum_exit(df: pd.DataFrame, mvrv_threshold: float = 2.0, ma_period: int = 50) -> pd.Series:
+def generate_momentum_exit(df: pd.DataFrame, mvrv_threshold: float = 2.0, ma_period: int = 50,
+                          mvrv_ma_period: int = None, use_daily_price_ma: bool = False) -> pd.Series:
     """
     Generate STRAT-005 Momentum-Confirmed Exit signals.
     Exit when: MVRV > threshold AND Price < MA
-    """
-    print(f"Generating Momentum Exit (MVRV>{mvrv_threshold} AND Price<MA{ma_period})...")
 
-    # Calculate moving average
-    ma = df['price'].rolling(window=ma_period, min_periods=ma_period).mean()
+    Args:
+        df: DataFrame with price and mvrv columns
+        mvrv_threshold: MVRV threshold for overvaluation (default 2.0)
+        ma_period: Price MA period (default 50)
+        mvrv_ma_period: Optional MVRV smoothing period (None = use raw MVRV)
+        use_daily_price_ma: If True, calculate MA on daily price then forward-fill
+    """
+    mvrv_desc = f"MVRV_MA{mvrv_ma_period}" if mvrv_ma_period else "MVRV"
+    price_desc = f"Price<MA{ma_period}_daily" if use_daily_price_ma else f"Price<MA{ma_period}"
+    print(f"Generating Momentum Exit ({mvrv_desc}>{mvrv_threshold} AND {price_desc})...")
+
+    # Calculate price moving average
+    if use_daily_price_ma:
+        # Load daily price, calculate MA, then forward-fill to hourly
+        daily_price = load_metric('price', 'brk')
+        daily_ma = daily_price.rolling(window=ma_period, min_periods=ma_period).mean()
+        # Forward-fill to match hourly index
+        price_ma = daily_ma.reindex(df.index, method='ffill')
+        print(f"  Using daily {ma_period}d MA forward-filled to hourly")
+    else:
+        price_ma = df['price'].rolling(window=ma_period, min_periods=ma_period).mean()
+
+    # Calculate MVRV (optionally smoothed)
+    if mvrv_ma_period:
+        mvrv = df['mvrv'].rolling(window=mvrv_ma_period, min_periods=mvrv_ma_period).mean()
+    else:
+        mvrv = df['mvrv']
 
     # Exit conditions - both must be true
-    mvrv_overvalued = df['mvrv'] > mvrv_threshold
-    below_ma = df['price'] < ma
+    mvrv_overvalued = mvrv > mvrv_threshold
+    below_ma = df['price'] < price_ma
 
     exits = mvrv_overvalued & below_ma
 
@@ -789,21 +990,243 @@ def run_monte_carlo(trades: list, init_cash: float = 10000, n_simulations: int =
 
 
 # =============================================================================
+# RANDOM FORWARD TESTING
+# =============================================================================
+
+def run_random_forward_test(df: pd.DataFrame, strategy_config: dict,
+                            n_splits: int = 20, test_pct: float = 0.3,
+                            min_test_days: int = 180, seed: int = 42) -> dict:
+    """
+    Run random forward testing by sampling different train/test splits.
+
+    Unlike Monte Carlo (which shuffles existing trades), this tests if the
+    strategy finds profitable trades across DIFFERENT time periods.
+
+    Args:
+        df: Full DataFrame with all data
+        strategy_config: Strategy configuration dict
+        n_splits: Number of random splits to test
+        test_pct: Approximate percentage of data for test period
+        min_test_days: Minimum test period length
+        seed: Random seed for reproducibility
+
+    Returns:
+        Dict with random forward test statistics
+    """
+    np.random.seed(seed)
+
+    if len(df) < min_test_days * 2:
+        return {
+            'n_splits': 0,
+            'error': 'Insufficient data for random forward testing'
+        }
+
+    # Get strategy parameters
+    entry_config = strategy_config.get('entry', {})
+    exit_config = strategy_config.get('exit', {})
+    entry_threshold = entry_config.get('required_conditions', 4)
+    resolution = strategy_config.get('resolution', 'd1')
+
+    # Parse exit parameters
+    exit_conditions = exit_config.get('conditions', [])
+    mvrv_threshold = 2.0
+    ma_period = 50
+    mvrv_ma_period = None
+    use_daily_price_ma = False
+
+    for c in exit_conditions:
+        metric = c.get('metric', '')
+        if metric == 'mvrv':
+            mvrv_threshold = c.get('threshold', 2.0)
+        elif metric.startswith('mvrv_ma_'):
+            try:
+                mvrv_ma_period = int(metric.split('_')[-1])
+            except:
+                pass
+
+        metric_compare = c.get('metric_compare', '')
+        if metric_compare.startswith('price_ma_'):
+            if metric_compare.endswith('_daily'):
+                use_daily_price_ma = True
+                parts = metric_compare.replace('_daily', '').split('_')
+            else:
+                parts = metric_compare.split('_')
+            try:
+                ma_period = int(parts[-1])
+            except:
+                ma_period = 50
+
+    # Calculate valid split range
+    total_rows = len(df)
+    min_train_rows = int(total_rows * 0.3)  # At least 30% for training
+
+    # Determine row-based min test size
+    if resolution in ['h1', 'hourly']:
+        min_test_rows = min_test_days * 24
+    elif resolution == 'h4':
+        min_test_rows = min_test_days * 6
+    elif resolution == 'h8':
+        min_test_rows = min_test_days * 3
+    else:
+        min_test_rows = min_test_days
+
+    # Valid split points: must leave enough for both train and test
+    max_split_idx = total_rows - min_test_rows
+    min_split_idx = min_train_rows
+
+    if max_split_idx <= min_split_idx:
+        return {
+            'n_splits': 0,
+            'error': 'Data range too small for meaningful splits'
+        }
+
+    # Generate random split points
+    split_indices = np.random.randint(min_split_idx, max_split_idx, size=n_splits)
+
+    # Run backtest for each split
+    results = []
+
+    for i, split_idx in enumerate(split_indices):
+        try:
+            train_df = df.iloc[:split_idx].copy()
+            test_df = df.iloc[split_idx:].copy()
+
+            if len(test_df) < 100:  # Skip if test period too small
+                continue
+
+            # Generate signals
+            test_entries = generate_buy_the_dip_entries(test_df, threshold=entry_threshold)
+            test_exits = generate_momentum_exit(
+                test_df,
+                mvrv_threshold=mvrv_threshold,
+                ma_period=ma_period,
+                mvrv_ma_period=mvrv_ma_period,
+                use_daily_price_ma=use_daily_price_ma
+            )
+
+            # Skip if no entries
+            if test_entries.sum() == 0:
+                continue
+
+            # Run backtest (simplified - just get key metrics)
+            pf = vbt.Portfolio.from_signals(
+                close=test_df['price'],
+                entries=test_entries,
+                exits=test_exits,
+                size=0.2,  # 20% position size
+                size_type='percent',
+                fees=FEES,
+                slippage=SLIPPAGE,
+                init_cash=10000,
+                freq=RESOLUTION_FREQ_MAP.get(resolution, '1D')
+            )
+
+            total_return = pf.total_return() * 100
+            max_dd = pf.max_drawdown() * 100
+            num_trades = pf.trades.count()
+            win_rate = pf.trades.win_rate() * 100 if num_trades > 0 else 0
+            sharpe = pf.sharpe_ratio()
+
+            # Buy & hold benchmark
+            bh_return = (test_df['price'].iloc[-1] / test_df['price'].iloc[0] - 1) * 100
+
+            results.append({
+                'split_idx': int(split_idx),
+                'split_date': str(df.index[split_idx].date()),
+                'test_start': str(test_df.index[0].date()),
+                'test_end': str(test_df.index[-1].date()),
+                'test_days': len(test_df),
+                'return_pct': round(total_return, 2),
+                'max_dd_pct': round(max_dd, 2),
+                'num_trades': int(num_trades),
+                'win_rate': round(win_rate, 1),
+                'sharpe': round(sharpe, 2) if not np.isnan(sharpe) else 0,
+                'bh_return': round(bh_return, 2),
+                'vs_bh': round(total_return - bh_return, 2)
+            })
+
+        except Exception as e:
+            # Skip failed splits silently
+            continue
+
+    if len(results) < 3:
+        return {
+            'n_splits': len(results),
+            'error': 'Too few successful splits'
+        }
+
+    # Calculate statistics across all splits
+    returns = np.array([r['return_pct'] for r in results])
+    max_dds = np.array([r['max_dd_pct'] for r in results])
+    trade_counts = np.array([r['num_trades'] for r in results])
+    win_rates = np.array([r['win_rate'] for r in results])
+    vs_bh = np.array([r['vs_bh'] for r in results])
+
+    # How often strategy is profitable / beats B&H
+    pct_profitable = float(np.mean(returns > 0) * 100)
+    pct_beats_bh = float(np.mean(vs_bh > 0) * 100)
+
+    return {
+        'n_splits': len(results),
+        'splits': results,
+        'statistics': {
+            'return_mean': round(float(np.mean(returns)), 2),
+            'return_std': round(float(np.std(returns)), 2),
+            'return_min': round(float(np.min(returns)), 2),
+            'return_max': round(float(np.max(returns)), 2),
+            'return_5th': round(float(np.percentile(returns, 5)), 2),
+            'return_25th': round(float(np.percentile(returns, 25)), 2),
+            'return_50th': round(float(np.percentile(returns, 50)), 2),
+            'return_75th': round(float(np.percentile(returns, 75)), 2),
+            'return_95th': round(float(np.percentile(returns, 95)), 2),
+            'dd_mean': round(float(np.mean(max_dds)), 2),
+            'dd_std': round(float(np.std(max_dds)), 2),
+            'dd_worst': round(float(np.min(max_dds)), 2),  # Most negative
+            'dd_best': round(float(np.max(max_dds)), 2),   # Least negative
+            'trades_mean': round(float(np.mean(trade_counts)), 1),
+            'trades_std': round(float(np.std(trade_counts)), 1),
+            'win_rate_mean': round(float(np.mean(win_rates)), 1),
+            'win_rate_std': round(float(np.std(win_rates)), 1),
+            'pct_profitable': round(pct_profitable, 1),
+            'pct_beats_bh': round(pct_beats_bh, 1),
+        }
+    }
+
+
+# =============================================================================
 # VECTORBT BACKTESTING
 # =============================================================================
 
 def backtest_with_vectorbt(df: pd.DataFrame, entries: pd.Series, exits: pd.Series,
-                           name: str = "Strategy") -> dict:
+                           name: str = "Strategy",
+                           stop_loss: float = None,
+                           resolution: str = 'daily') -> dict:
     """
     Run backtest using VectorBT.
     VectorBT handles position sizing, fees, and statistics automatically.
+
+    Args:
+        df: DataFrame with price and metric data
+        entries: Boolean Series for entry signals
+        exits: Boolean Series for exit signals
+        name: Strategy name for display
+        stop_loss: Stop loss percentage (e.g., 0.10 for 10%). None uses default.
+        resolution: Data resolution for frequency setting
     """
     print(f"\nBacktesting: {name}")
+
+    # Use provided stop_loss or default
+    sl_pct = stop_loss if stop_loss is not None else STOP_LOSS_PCT
 
     # Calculate position size based on risk parameters
     # Position % = Risk % / Stop Loss %
     # e.g., 2% risk / 10% stop = 20% of portfolio per trade
-    position_size_pct = RISK_PER_TRADE / STOP_LOSS_PCT
+    position_size_pct = RISK_PER_TRADE / sl_pct
+
+    # Get frequency from resolution
+    freq = RESOLUTION_FREQ_MAP.get(resolution, '1D')
+
+    print(f"  Stop Loss: {sl_pct*100:.1f}% | Position Size: {position_size_pct*100:.0f}% | Freq: {freq}")
 
     # Create portfolio with VectorBT using risk-based position sizing
     pf = vbt.Portfolio.from_signals(
@@ -815,8 +1238,8 @@ def backtest_with_vectorbt(df: pd.DataFrame, entries: pd.Series, exits: pd.Serie
         fees=FEES,
         slippage=SLIPPAGE,
         init_cash=INIT_CASH,
-        freq='1D',
-        sl_stop=STOP_LOSS_PCT,  # Stop-loss at 10% below entry
+        freq=freq,
+        sl_stop=sl_pct,  # Stop-loss below entry
         accumulate=False  # Don't add to existing positions
     )
 
@@ -1140,8 +1563,18 @@ def run_strategy_backtest(strategy_config: dict, df: pd.DataFrame,
     strategy_id = strategy_config.get('id', 'unknown')
     strategy_name = strategy_config.get('name', 'Unknown Strategy')
 
+    # Extract risk management settings from config
+    risk_config = strategy_config.get('risk_management', {})
+    stop_loss = risk_config.get('stop_loss_pct')
+    if stop_loss is not None:
+        stop_loss = stop_loss / 100 if stop_loss > 1 else stop_loss  # Convert % to decimal
+
+    # Extract resolution from config
+    resolution = strategy_config.get('resolution', 'daily')
+
     print(f"\n{'=' * 80}")
     print(f"BACKTESTING: {strategy_id} - {strategy_name}")
+    print(f"Resolution: {resolution} | Stop Loss: {stop_loss*100 if stop_loss else STOP_LOSS_PCT*100:.0f}%")
     print(f"{'=' * 80}")
 
     # Split train/test
@@ -1155,16 +1588,17 @@ def run_strategy_backtest(strategy_config: dict, df: pd.DataFrame,
     # Generate entry signals (Buy The Dip for now - can be extended based on config)
     entry_config = strategy_config.get('entry', {})
     entry_logic = entry_config.get('logic', 'COUNT_THRESHOLD')
+    entry_threshold = entry_config.get('required_conditions', 4)  # Default 4/5 threshold
 
-    train_entries = generate_buy_the_dip_entries(train_df)
-    test_entries = generate_buy_the_dip_entries(test_df)
+    train_entries = generate_buy_the_dip_entries(train_df, threshold=entry_threshold)
+    test_entries = generate_buy_the_dip_entries(test_df, threshold=entry_threshold)
 
     # Generate exit signals based on strategy config
     exit_config = strategy_config.get('exit', {})
     exit_conditions = exit_config.get('conditions', [])
 
     # Determine exit type from config
-    has_mvrv_exit = any(c.get('metric') == 'mvrv' for c in exit_conditions)
+    has_mvrv_exit = any(c.get('metric', '').startswith('mvrv') for c in exit_conditions)
     has_momentum_exit = any(c.get('metric_compare', '').startswith('price_ma') for c in exit_conditions)
     has_lth_sopr = any(c.get('metric') == 'sopr_lth' for c in exit_conditions)
 
@@ -1172,18 +1606,42 @@ def run_strategy_backtest(strategy_config: dict, df: pd.DataFrame,
         # STRAT-005 style: MVRV + Momentum
         mvrv_threshold = 2.0
         ma_period = 50
+        mvrv_ma_period = None  # None = raw MVRV, int = smoothed MVRV
+        use_daily_price_ma = False  # True = use daily price for MA calculation
         for c in exit_conditions:
-            if c.get('metric') == 'mvrv':
+            metric = c.get('metric', '')
+            if metric == 'mvrv':
                 mvrv_threshold = c.get('threshold', 2.0)
-            if c.get('metric_compare', '').startswith('price_ma_'):
+            elif metric.startswith('mvrv_ma_'):
+                # MVRV with MA smoothing (e.g., mvrv_ma_500)
+                mvrv_threshold = c.get('threshold', 2.0)
                 try:
-                    ma_period = int(c.get('metric_compare').split('_')[-1])
+                    mvrv_ma_period = int(metric.split('_')[-1])
                 except:
-                    ma_period = 50
+                    mvrv_ma_period = None
+            metric_compare = c.get('metric_compare', '')
+            if metric_compare.startswith('price_ma_'):
+                # Check for _daily suffix (e.g., price_ma_50_daily)
+                if metric_compare.endswith('_daily'):
+                    use_daily_price_ma = True
+                    # Extract period from price_ma_XX_daily
+                    parts = metric_compare.replace('_daily', '').split('_')
+                    try:
+                        ma_period = int(parts[-1])
+                    except:
+                        ma_period = 50
+                else:
+                    # Standard hourly MA (e.g., price_ma_1200)
+                    try:
+                        ma_period = int(metric_compare.split('_')[-1])
+                    except:
+                        ma_period = 50
 
-        train_exits = generate_momentum_exit(train_df, mvrv_threshold, ma_period)
-        test_exits = generate_momentum_exit(test_df, mvrv_threshold, ma_period)
-        exit_description = f"Momentum Exit (MVRV>{mvrv_threshold} AND Price<MA{ma_period})"
+        train_exits = generate_momentum_exit(train_df, mvrv_threshold, ma_period, mvrv_ma_period, use_daily_price_ma)
+        test_exits = generate_momentum_exit(test_df, mvrv_threshold, ma_period, mvrv_ma_period, use_daily_price_ma)
+        mvrv_desc = f"MVRV_MA{mvrv_ma_period}" if mvrv_ma_period else "MVRV"
+        price_desc = f"Price<MA{ma_period}d" if use_daily_price_ma else f"Price<MA{ma_period}h"
+        exit_description = f"Momentum Exit ({mvrv_desc}>{mvrv_threshold} AND {price_desc})"
 
     elif has_mvrv_exit and has_lth_sopr:
         # LTH Distribution style
@@ -1201,10 +1659,20 @@ def run_strategy_backtest(strategy_config: dict, df: pd.DataFrame,
 
     # Run backtests
     print(f"\n--- Train Period ---")
-    train_result = backtest_with_vectorbt(train_df, train_entries, train_exits, f"{strategy_id} (Train)")
+    train_result = backtest_with_vectorbt(
+        train_df, train_entries, train_exits,
+        name=f"{strategy_id} (Train)",
+        stop_loss=stop_loss,
+        resolution=resolution
+    )
 
     print(f"\n--- Test Period (Out-of-Sample) ---")
-    test_result = backtest_with_vectorbt(test_df, test_entries, test_exits, f"{strategy_id} (Test)")
+    test_result = backtest_with_vectorbt(
+        test_df, test_entries, test_exits,
+        name=f"{strategy_id} (Test)",
+        stop_loss=stop_loss,
+        resolution=resolution
+    )
 
     # Buy & Hold benchmark
     bh_train = (train_df['price'].iloc[-1] / train_df['price'].iloc[0] - 1) * 100
@@ -1236,6 +1704,24 @@ def run_strategy_backtest(strategy_config: dict, df: pd.DataFrame,
         print(f"  MC DD Range: {mc_result['percentiles']['dd_5th']:.1f}% - {mc_result['percentiles']['dd_95th']:.1f}%")
     else:
         print(f"  Skipped (need >= 2 trades, have {len(test_trades)})")
+
+    # Random Forward Testing
+    print(f"\n--- Random Forward Testing ---")
+    rft_result = None
+    try:
+        rft_result = run_random_forward_test(df, strategy_config, n_splits=20)
+        if rft_result.get('n_splits', 0) >= 3:
+            stats = rft_result['statistics']
+            print(f"  Splits tested: {rft_result['n_splits']}")
+            print(f"  Return range: {stats['return_5th']:.1f}% to {stats['return_95th']:.1f}%")
+            print(f"  Return mean: {stats['return_mean']:.1f}% (std: {stats['return_std']:.1f}%)")
+            print(f"  Profitable: {stats['pct_profitable']:.0f}% of splits")
+            print(f"  Beats B&H: {stats['pct_beats_bh']:.0f}% of splits")
+        else:
+            print(f"  Skipped ({rft_result.get('error', 'insufficient splits')})")
+            rft_result = None
+    except Exception as e:
+        print(f"  Error: {e}")
 
     # Walk-forward analysis
     wf_result = None
@@ -1321,6 +1807,7 @@ def run_strategy_backtest(strategy_config: dict, df: pd.DataFrame,
         "trades": test_result.get('trades', []),
         "trade_chart_html": trade_chart_html,
         "monte_carlo": mc_result,
+        "random_forward": rft_result,
         "walk_forward": wf_result
     }
 
@@ -1431,13 +1918,108 @@ def run_walk_forward_for_strategy(df: pd.DataFrame, strategy_config: dict, n_fol
 # MAIN
 # =============================================================================
 
+def print_smoothing_comparison(outputs: list):
+    """Print comparison table across smoothing windows."""
+    print(f"\n{'=' * 80}")
+    print("SMOOTHING COMPARISON")
+    print(f"{'=' * 80}")
+    print(f"\n{'Window':<10} {'Train Return':>14} {'Test Return':>13} {'Test Sharpe':>13} "
+          f"{'Test MaxDD':>12} {'Test Trades':>13} {'Test WinRate':>13}")
+    print("-" * 88)
+
+    for results_path, window, results in outputs:
+        label = f"MA-{window}" if window else "Raw"
+        train = results.get('train', {})
+        test = results.get('test', {})
+        train_ret = train.get('return_pct', 0)
+        test_ret = test.get('return_pct', 0)
+        test_sharpe = test.get('sharpe', 0)
+        test_dd = test.get('max_dd', 0)
+        test_trades = test.get('num_trades', 0)
+        test_wr = test.get('win_rate', 0)
+        print(f"{label:<10} {train_ret:>+13.1f}% {test_ret:>+12.1f}% {test_sharpe:>13.2f} "
+              f"{test_dd:>11.1f}% {test_trades:>13} {test_wr:>12.1f}%")
+
+    print()
+
+
+def parse_smoothing_windows(smoothing_arg: str) -> list:
+    """Parse --smoothing argument into list of window sizes."""
+    if smoothing_arg is None:
+        return [None]  # No smoothing — single run with raw data
+    if smoothing_arg.lower() == 'all':
+        return VALID_SMOOTHING_WINDOWS
+    try:
+        window = int(smoothing_arg)
+        if window not in VALID_SMOOTHING_WINDOWS:
+            print(f"⚠ Smoothing window {window} not in standard set {VALID_SMOOTHING_WINDOWS}")
+            print(f"  Using it anyway.")
+        return [window]
+    except ValueError:
+        print(f"✗ Invalid --smoothing value: '{smoothing_arg}'. Use a number or 'all'.")
+        sys.exit(1)
+
+
+def run_backtest_for_config(config: dict, df_raw: pd.DataFrame, smoothing_windows: list,
+                            include_walk_forward: bool = False) -> list:
+    """Run backtest(s) for a config across one or more smoothing windows.
+
+    Args:
+        config: Strategy configuration dict
+        df_raw: Raw (unsmoothed) DataFrame
+        smoothing_windows: List of window sizes (None = no smoothing)
+        include_walk_forward: Whether to include walk-forward analysis
+
+    Returns:
+        List of (results_path, window, results) tuples
+    """
+    outputs = []
+    for window in smoothing_windows:
+        if window is not None:
+            print(f"\n{'=' * 80}")
+            print(f"SMOOTHING: MA-{window}")
+            print(f"{'=' * 80}")
+            df = apply_smoothing(df_raw, window)
+            # Tag config so results file gets a unique name
+            config['_smoothing_window'] = window
+        else:
+            df = df_raw
+            config.pop('_smoothing_window', None)
+
+        results = run_strategy_backtest(config, df, include_walk_forward=include_walk_forward)
+
+        # Add smoothing metadata to results
+        if window is not None:
+            results['smoothing'] = {
+                'window': window,
+                'label': f'MA-{window}',
+                'smoothed_columns': [c for c in SMOOTH_COLUMNS if c in df_raw.columns]
+            }
+
+        results_path = save_strategy_results(config, results)
+        label = f" (MA-{window})" if window else ""
+        print(f"\n{'=' * 80}")
+        print(f"✓ Results{label} saved to: {results_path}")
+        print(f"{'=' * 80}")
+        outputs.append((results_path, window, results))
+
+    return outputs
+
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='VectorBT Strategy Backtester')
     parser.add_argument('--config', '-c', type=str, help='Path to strategy config JSON file')
     parser.add_argument('--strategy', '-s', type=str, help='Strategy ID to backtest (e.g., strat005)')
+    parser.add_argument('--resolution', '-r', type=str, default='daily',
+                        choices=['daily', 'd1', 'h1', 'h4', 'h8', 'h12'],
+                        help='Data resolution: daily, h1, h4, h8, h12 (default: daily)')
+    parser.add_argument('--stop-loss', type=float, help='Stop loss percentage (e.g., 10 for 10%%)')
     parser.add_argument('--list', '-l', action='store_true', help='List available strategies')
     parser.add_argument('--all', '-a', action='store_true', help='Run backtest for all strategies')
+    parser.add_argument('--smoothing', type=str, default=None,
+                        help='MA smoothing window for signal metrics. '
+                             'Use a number (4,6,8,12) or "all" to run all windows.')
     parser.add_argument('--walk-forward', '-w', action='store_true', help='Include walk-forward analysis')
     parser.add_argument('--debug', '-d', action='store_true', help='Show detailed debug output')
     return parser.parse_args()
@@ -1464,8 +2046,8 @@ def main():
     print("VECTORBT STRATEGY BACKTESTER")
     print("=" * 80)
 
-    # Load data
-    df = load_all_data()
+    # Parse smoothing windows
+    smoothing_windows = parse_smoothing_windows(args.smoothing)
 
     # Config file mode (direct JSON file path)
     if args.config:
@@ -1473,14 +2055,37 @@ def main():
         if not config:
             return
 
-        print(f"\n📋 Strategy: {config.get('id', 'UNKNOWN')} - {config.get('name', 'Unknown')}")
-        results = run_strategy_backtest(config, df, include_walk_forward=args.walk_forward)
+        # Determine resolution: CLI > config > default
+        resolution = args.resolution
+        if resolution == 'daily' and 'resolution' in config:
+            resolution = config['resolution']
+        # Update config with final resolution so backtest uses correct frequency
+        config['resolution'] = resolution
+        print(f"\n📊 Resolution: {resolution}")
+        if args.smoothing:
+            print(f"📈 Smoothing: {args.smoothing} (windows: {[w for w in smoothing_windows]})")
 
-        # Save to sidecar file
-        results_path = save_strategy_results(config, results)
-        print(f"\n{'=' * 80}")
-        print(f"✓ Results saved to: {results_path}")
-        print(f"{'=' * 80}")
+        # Apply CLI stop-loss override if provided
+        if args.stop_loss is not None:
+            if 'risk_management' not in config:
+                config['risk_management'] = {}
+            config['risk_management']['stop_loss_pct'] = args.stop_loss
+            print(f"📉 Stop Loss: {args.stop_loss}% (CLI override)")
+        elif config.get('risk_management', {}).get('stop_loss_pct'):
+            print(f"📉 Stop Loss: {config['risk_management']['stop_loss_pct']}% (from config)")
+
+        # Load data for resolution
+        df = load_data_for_resolution(resolution)
+        if df.empty:
+            print("✗ Failed to load data")
+            return
+
+        print(f"\n📋 Strategy: {config.get('id', 'UNKNOWN')} - {config.get('name', 'Unknown')}")
+        outputs = run_backtest_for_config(config, df, smoothing_windows,
+                                         include_walk_forward=args.walk_forward)
+
+        if len(outputs) > 1:
+            print_smoothing_comparison(outputs)
         return
 
     # Strategy-based backtest mode (by ID)
@@ -1491,24 +2096,62 @@ def main():
             print("  Use --list to see available strategies.")
             return
 
-        results = run_strategy_backtest(config, df, include_walk_forward=args.walk_forward)
+        # Determine resolution: CLI > config > default
+        resolution = args.resolution
+        if resolution == 'daily' and 'resolution' in config:
+            resolution = config['resolution']
+        # Update config with final resolution so backtest uses correct frequency
+        config['resolution'] = resolution
+        print(f"\n📊 Resolution: {resolution}")
+        if args.smoothing:
+            print(f"📈 Smoothing: {args.smoothing} (windows: {[w for w in smoothing_windows]})")
 
-        # Save to sidecar file
-        results_path = save_strategy_results(config, results)
-        print(f"\n{'=' * 80}")
-        print(f"✓ Results saved to: {results_path}")
-        print(f"{'=' * 80}")
+        # Apply CLI stop-loss override if provided
+        if args.stop_loss is not None:
+            if 'risk_management' not in config:
+                config['risk_management'] = {}
+            config['risk_management']['stop_loss_pct'] = args.stop_loss
+            print(f"📉 Stop Loss: {args.stop_loss}% (CLI override)")
+        elif config.get('risk_management', {}).get('stop_loss_pct'):
+            print(f"📉 Stop Loss: {config['risk_management']['stop_loss_pct']}% (from config)")
+
+        # Load data for resolution
+        df = load_data_for_resolution(resolution)
+        if df.empty:
+            print("✗ Failed to load data")
+            return
+
+        outputs = run_backtest_for_config(config, df, smoothing_windows,
+                                         include_walk_forward=args.walk_forward)
+
+        if len(outputs) > 1:
+            print_smoothing_comparison(outputs)
         return
 
     # All strategies mode
     if args.all:
         strategies = list_strategies()
         print(f"\nRunning backtest for {len(strategies)} strategies...")
+        print(f"📊 Resolution: {args.resolution}")
+        if args.stop_loss is not None:
+            print(f"📉 Stop Loss: {args.stop_loss}% (CLI override for all)")
+
+        # Load data once for all strategies
+        df = load_data_for_resolution(args.resolution)
+        if df.empty:
+            print("✗ Failed to load data")
+            return
 
         for strat in strategies:
             config = load_strategy_config(strat['id'])
             if config:
                 try:
+                    # Apply CLI stop-loss override if provided
+                    if args.stop_loss is not None:
+                        if 'risk_management' not in config:
+                            config['risk_management'] = {}
+                        config['risk_management']['stop_loss_pct'] = args.stop_loss
+
                     results = run_strategy_backtest(config, df, include_walk_forward=args.walk_forward)
                     results_path = save_strategy_results(config, results)
                     print(f"\n✓ {strat['id']}: Saved to {results_path.name}")
@@ -1524,6 +2167,14 @@ def main():
     # Only runs if no --strategy or --all specified
     if args.walk_forward and not args.strategy and not args.all:
         print("\nRunning legacy walk-forward analysis...")
+        print(f"📊 Resolution: {args.resolution}")
+
+        # Load data for resolution
+        df = load_data_for_resolution(args.resolution)
+        if df.empty:
+            print("✗ Failed to load data")
+            return
+
         wf_results = run_walk_forward(df, n_folds=6)
 
         # Save walk-forward results to JSON
@@ -1563,6 +2214,13 @@ def main():
     # LEGACY MODE: Run all hardcoded strategies (for backward compatibility)
     # =========================================================================
     print("\nRunning legacy backtest mode (use --strategy or --all for new mode)...")
+    print(f"📊 Resolution: {args.resolution}")
+
+    # Load data for resolution
+    df = load_data_for_resolution(args.resolution)
+    if df.empty:
+        print("✗ Failed to load data")
+        return
 
     # Split train/test
     train_df = df[df.index <= TRAIN_END].copy()

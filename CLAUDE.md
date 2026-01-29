@@ -26,7 +26,7 @@ This project implements James Check's on-chain analysis framework for Bitcoin tr
 │  │   BRK    │  │ BitcoinLab│  │Glassnode │  │
 │  │  (FREE)  │  │  (QUOTA)  │  │  (PAID)  │  │
 │  │  Daily   │  │ h1/h4/h8  │  │ Derives  │  │
-│  │41 metrics│  │ 5 metrics │  │3 metrics │  │
+│  │41 metrics│  │348 metrics │  │3 metrics │  │
 │  └────┬─────┘  └────┬──────┘  └────┬─────┘  │
 └───────┼─────────────┼──────────────┼─────────┘
         │             │              │
@@ -63,7 +63,7 @@ This project implements James Check's on-chain analysis framework for Bitcoin tr
 ### Stage 1: Data Sync (`run.py`)
 **Multi-source data acquisition:**
 - **BRK** (FREE): `python run.py brk-sync` → `data/brk/daily/` (41 metrics)
-- **Bitcoin Lab** (QUOTA): `python run.py bl-sync-hourly` → `data/bl/hourly/` (5 metrics)
+- **Bitcoin Lab** (QUOTA): `python run.py bl-sync-hourly` → `data/bl/hourly/` (348 metrics available, quota-limited)
 - **Glassnode** (PAID): Manual sync → `data/glassnode/daily/` (derivatives)
 
 ### Stage 2: Signal Calculation (`scripts/calculate.py`)
@@ -87,7 +87,7 @@ This project implements James Check's on-chain analysis framework for Bitcoin tr
 | Source | Cost | Resolutions | Use Case |
 |--------|------|-------------|----------|
 | **BRK** | FREE | Daily only | **PRIMARY** - All daily on-chain metrics (41 metrics) |
-| **Bitcoin Lab** | Paid (1M quota/week) | Hourly, 4h, 8h, 12h, Daily | **SECONDARY** - High-frequency data & backups |
+| **Bitcoin Lab** | Paid (40M quota/week) | Hourly, 4h, 8h, 12h, Daily | **SECONDARY** - 348 metrics at all resolutions, quota-limited |
 | **Glassnode** | Paid | Daily | Derivatives only (funding rates, liquidations) |
 
 ### Current Data Availability (Last Synced: 2026-01-23)
@@ -120,25 +120,36 @@ python run.py brk-status        # Check sync status
 
 #### Bitcoin Lab (PAID - HIGH FREQUENCY)
 **Status**: ✅ Multi-resolution synced
-**Quota**: 776,833 / 1,000,000 DPs remaining (77.7%)
+**Quota**: 40,000,000 DPs/week (Tier 2)
 **Quota Reset**: Every 7 days (next: 2026-01-30)
 **Date Range**: 2015-01-01 → 2026-01-23
 
 **Resolution Coverage:**
 
-| Resolution | Metrics | Rows/Metric | Total Rows | Date Range | Last Sync |
-|------------|---------|-------------|------------|------------|-----------|
-| **h1** (hourly) | 5 | 96,735 | 483,675 | 2015-01-01 → 2026-01-23 11:00 | ✅ 2026-01-23 |
-| **h4** (4-hourly) | 5 | 24,243 | 121,215 | 2015-01-01 → 2026-01-23 08:00 | ✅ 2026-01-23 |
-| **h8** (8-hourly) | 5 | 12,121 | 60,605 | 2015-01-01 → 2026-01-23 00:00 | ✅ 2026-01-23 |
-| **h12** (12-hourly) | 5 | 8,081 | 40,405 | 2015-01-01 → 2026-01-23 00:00 | ✅ 2026-01-23 |
+| Resolution | Synced | Available | Rows/Metric | Date Range | Last Sync |
+|------------|--------|-----------|-------------|------------|-----------|
+| **h1** (hourly) | 12 | 50+ | 96,876 | 2015-01-01 → 2026-01-29 10:00 | ✅ 2026-01-29 |
+| **h4** (4-hourly) | 5 | 50+ | 24,243 | 2015-01-01 → 2026-01-23 08:00 | ✅ 2026-01-23 |
+| **h8** (8-hourly) | 5 | 50+ | 12,121 | 2015-01-01 → 2026-01-23 00:00 | ✅ 2026-01-23 |
+| **h12** (12-hourly) | 5 | 50+ | 8,081 | 2015-01-01 → 2026-01-23 00:00 | ✅ 2026-01-23 |
 
-**Available Metrics at All Resolutions:**
-1. **price** - BTC/USD price
-2. **sopr** - Spent Output Profit Ratio (all holders)
-3. **sopr_lth** - SOPR for long-term holders (>155 days)
-4. **sopr_sth** - SOPR for short-term holders (<155 days)
-5. **realized_loss** - Total realized losses in USD
+**API supports 348 metrics across 34 categories at all resolutions** (h1, h4, h8, h12, d1, block). Quota limits how many can be synced per week.
+- Full catalog: https://researchbitcoin.net/metrics/
+- API spec: https://api.researchbitcoin.net/openapi/openapi.json
+
+**Currently synced at h1 (12 metrics):**
+- price, market_cap, mvrv, mvrv_z, mvrv_lth, mvrv_sth, nvt
+- sopr, sopr_lth, sopr_sth, realized_profit, realized_loss
+
+**Currently synced at h4/h8/h12 (5 metrics):**
+- price, sopr, sopr_lth, sopr_sth, realized_loss
+
+**Priority metrics to sync next (when quota resets):**
+- nupl, nupl_lth, nupl_sth (Profitability pillar)
+- supply_lth, supply_sth, supply_total (Supply pillar)
+- liveliness, vaultedness (Activity pillar)
+- puell_multiple (Miner pillar)
+- realized_price, realized_price_sth, true_market_mean_price, vaulted_price, aviv (Valuation price levels)
 
 **Sync Commands:**
 ```bash
@@ -163,14 +174,26 @@ python run.py bl-status-hourly     # Hourly status only
 python run.py quota-estimate 30 h1 # Estimate cost for 30 days of hourly
 ```
 
-**Quota Costs (per metric):**
-- **h1** (hourly): ~24 datapoints/day
-- **h4** (4-hourly): ~6 datapoints/day
-- **h8** (8-hourly): ~3 datapoints/day
-- **h12** (12-hourly): ~2 datapoints/day
-- **d1** (daily): ~1 datapoint/day
+**Quota Mechanics:**
+- 1 DP = 1 numeric value for 1 metric at 1 timestamp
+- Binned metrics: DP = timestamps × bins (e.g., `spent_output_by_age_sumbtc` at daily with 7 bins = 7 DP/day)
+- Quota charged 1:1 with DP
 
-**Example**: Syncing 30 days of hourly data for 5 metrics = 30 × 24 × 5 = 3,600 datapoints
+**Quota Costs (simple series, per metric):**
+- **h1** (hourly): ~24 DP/day
+- **h4** (4-hourly): ~6 DP/day
+- **h8** (8-hourly): ~3 DP/day
+- **h12** (12-hourly): ~2 DP/day
+- **d1** (daily): ~1 DP/day
+
+**Tiers:**
+| Tier | Weekly Quota | Historical Data | Activation |
+|------|-------------|-----------------|------------|
+| 0 (Free) | 55,000 DPs | Past 1 year | Free |
+| 1 | 900,000 DPs | Unlimited | ≥ 0.00025 BTC |
+| 2 | 40,000,000 DPs | Unlimited | ≥ 0.00100 BTC |
+
+**Example**: Syncing 30 days of hourly data for 12 metrics = 30 × 24 × 12 = 8,640 DP
 
 #### Glassnode (PAID - DERIVATIVES ONLY)
 **Status**: ⚠️ Manual sync required
@@ -189,8 +212,11 @@ python run.py quota-estimate 30 h1 # Estimate cost for 30 days of hourly
 **Bitcoin Lab:**
 - Token: `ae92658e-373f-4fce-a5b3-1cfc1ffb4da6`
 - URL: `https://api.researchbitcoin.net`
-- Tier: 2 (1M datapoints/week)
+- Tier: 2 (40M datapoints/week)
 - Token Expires: 2026-04-06
+- API Spec: `https://api.researchbitcoin.net/openapi/openapi.json`
+- Metrics Catalog: `https://researchbitcoin.net/metrics/`
+- Error Codes: 400 (invalid params), 401 (missing/invalid token), 403 (forbidden/tier), 404 (not found), 429 (rate limited), 5xx (server error)
 
 **BRK:**
 - URL: `https://next.bitview.space`
@@ -212,16 +238,15 @@ data/
 │       ├── sopr.parquet
 │       ├── mvrv.parquet
 │       └── ... (38 more)
-├── bl/                     # Bitcoin Lab (paid quota)
-│   ├── hourly/             # h1 resolution (5 metrics)
+├── bl/                     # Bitcoin Lab (paid quota, 50+ metrics available)
+│   ├── hourly/             # h1 resolution (12 synced, quota-limited)
 │   │   ├── price.parquet
+│   │   ├── mvrv.parquet
 │   │   ├── sopr.parquet
-│   │   ├── sopr_lth.parquet
-│   │   ├── sopr_sth.parquet
-│   │   └── realized_loss.parquet
-│   ├── h4/                 # 4-hourly (5 metrics)
-│   ├── h8/                 # 8-hourly (5 metrics)
-│   └── h12/                # 12-hourly (5 metrics)
+│   │   └── ... (9 more)
+│   ├── h4/                 # 4-hourly (5 synced)
+│   ├── h8/                 # 8-hourly (5 synced)
+│   └── h12/                # 12-hourly (5 synced)
 └── glassnode/
     └── daily/              # Derivatives data
         ├── funding_rate.parquet
@@ -270,7 +295,7 @@ loader.refresh_cache(metrics=['price', 'sopr'], source='brk')
 3. **Sync incrementally** - Only fetch new data since last sync
 4. **Monitor usage**: `python run.py quota` and `python run.py quota-history`
 5. **Plan ahead**: `python run.py quota-estimate 30 h1` before large syncs
-6. **Weekly refresh** - Quota resets every 7 days (1M datapoints)
+6. **Weekly refresh** - Quota resets every 7 days (40M datapoints)
 
 ### Data Freshness
 
@@ -285,7 +310,7 @@ python run.py data                  # Show cache status
 python run.py brk-status            # Confirm BRK sync
 python run.py bl-status-hourly      # Check hourly data
 
-# Optional: Sync Bitcoin Lab hourly (uses ~120 DPs for 5 metrics)
+# Optional: Sync Bitcoin Lab hourly (uses ~288 DPs for 12 metrics)
 python run.py bl-sync-hourly        # Only if doing intraday analysis
 ```
 
@@ -470,10 +495,10 @@ python scripts/fix_data_issues.py     # Auto-fix common issues
 | Path | Contents |
 |------|----------|
 | `data/brk/daily/*.parquet` | BRK on-chain metrics - 41 metrics, daily (FREE) |
-| `data/bl/hourly/*.parquet` | Bitcoin Lab hourly (h1) - 5 metrics, 2015-2026 |
-| `data/bl/h4/*.parquet` | Bitcoin Lab 4-hourly - 5 metrics, 2015-2026 |
-| `data/bl/h8/*.parquet` | Bitcoin Lab 8-hourly - 5 metrics, 2015-2026 |
-| `data/bl/h12/*.parquet` | Bitcoin Lab 12-hourly - 5 metrics, 2015-2026 |
+| `data/bl/hourly/*.parquet` | Bitcoin Lab hourly (h1) - 12 synced (348 available), 2015-2026 |
+| `data/bl/h4/*.parquet` | Bitcoin Lab 4-hourly - 5 synced (348 available), 2015-2026 |
+| `data/bl/h8/*.parquet` | Bitcoin Lab 8-hourly - 5 synced (348 available), 2015-2026 |
+| `data/bl/h12/*.parquet` | Bitcoin Lab 12-hourly - 5 synced (348 available), 2015-2026 |
 | `data/glassnode/daily/*.parquet` | Derivatives metrics (funding, liquidations) |
 | `data/signals/dashboard_context.json` | Pre-computed signals for dashboard |
 | `data/signals/*.parquet` | Signal time series |
@@ -511,7 +536,7 @@ python run.py brk-status            # Check BRK sync status
 python run.py data-refresh          # Refresh cache from BRK (FREE)
 
 # ===== BITCOIN LAB SYNC (PAID - CHECK QUOTA FIRST) =====
-python run.py quota                 # Check remaining quota (1M/week)
+python run.py quota                 # Check remaining quota (40M/week)
 python run.py bl-sync-hourly        # Sync hourly data (h1, ~120 DPs)
 python run.py bl-sync-h4            # Sync 4-hourly (h4, ~30 DPs)
 python run.py bl-sync-h8            # Sync 8-hourly (h8, ~15 DPs)
@@ -681,11 +706,11 @@ bitcoin-lab-btc-data-pipeline/
 │   └── dashboard_new.py         # HTML rendering (6 pillars)
 ├── data/
 │   ├── brk/daily/               # BRK metrics (FREE, 41 metrics, daily)
-│   ├── bl/                      # Bitcoin Lab (PAID, multi-resolution)
-│   │   ├── hourly/              # h1: 5 metrics, 96K rows each
-│   │   ├── h4/                  # 4-hourly: 5 metrics, 24K rows each
-│   │   ├── h8/                  # 8-hourly: 5 metrics, 12K rows each
-│   │   └── h12/                 # 12-hourly: 5 metrics, 8K rows each
+│   ├── bl/                      # Bitcoin Lab (PAID, 348 metrics available, quota-limited)
+│   │   ├── hourly/              # h1: 12 synced, 96K rows each
+│   │   ├── h4/                  # 4-hourly: 5 synced, 24K rows each
+│   │   ├── h8/                  # 8-hourly: 5 synced, 12K rows each
+│   │   └── h12/                 # 12-hourly: 5 synced, 8K rows each
 │   ├── glassnode/daily/         # Derivatives (funding, liquidations)
 │   ├── signals/                 # Computed signals
 │   └── results/                 # Backtest results

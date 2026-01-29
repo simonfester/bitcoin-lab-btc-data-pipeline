@@ -23,8 +23,38 @@ import sys
 
 PROJECT_ROOT = Path(__file__).parent.parent
 RAW_DATA_DIR = PROJECT_ROOT / "data" / "brk" / "daily"
+HOURLY_DATA_DIR = PROJECT_ROOT / "data" / "bl" / "hourly"
 GLASSNODE_DIR = PROJECT_ROOT / "data" / "glassnode" / "daily"
+GLASSNODE_HOURLY_DIR = PROJECT_ROOT / "data" / "glassnode" / "hourly"
 SIGNALS_DIR = PROJECT_ROOT / "data" / "signals"
+
+# Metrics available at hourly resolution from Bitcoin Lab API.
+# API has 348 metrics total; almost all support h1. Only a subset is listed here
+# (the ones used by the signal calculator). Only 12 are currently synced to disk
+# due to quota limits (1M DPs/week). See: https://researchbitcoin.net/metrics/
+HOURLY_METRICS = {
+    'price', 'market_cap',
+    'mvrv', 'mvrv_z', 'mvrv_lth', 'mvrv_sth', 'nvt', 'velocity',
+    'sopr', 'sopr_lth', 'sopr_sth',
+    'nupl', 'nupl_lth', 'nupl_sth', 'net_realized_pnl',
+    'supply_in_profit', 'supply_in_profit_percent', 'supply_in_loss',
+    'supply_lth', 'supply_sth', 'supply_lth_sth_ratio', 'supply_total',
+    'realized_cap', 'realized_cap_lth', 'realized_cap_sth',
+    'realized_price', 'realized_price_lth', 'realized_price_sth',
+    'liveliness', 'vaultedness', 'supply_active', 'supply_vaulted',
+    'true_market_mean_price', 'investor_cap', 'thermo_cap',
+    'vaulted_price', 'aviv',
+    'coindays_destroyed', 'asol', 'dormancy',
+    'difficulty', 'tx_count', 'utxo_increase',
+    'fee_total', 'fee_total_usd', 'fee_avg',
+    'volume_btc', 'volume_usd', 'volume_btc_adjusted',
+    'unrealized_profit', 'unrealized_loss', 'unrealized_cap',
+    'realized_profit', 'realized_loss',
+}
+
+# Hourly smoothing configuration
+SMOOTHING_WINDOWS = [4, 6, 8, 12]  # hours
+SMOOTH_METRICS = ['sopr', 'sopr_sth', 'sopr_lth', 'mvrv', 'mvrv_sth', 'realized_loss']
 
 # Ensure output directory exists
 SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
@@ -67,9 +97,23 @@ BUY_THE_DIP_CONDITIONS = [
 # DATA LOADING
 # =============================================================================
 
-def load_metric(name: str, source: str = "brk") -> pd.DataFrame:
-    """Load metric from parquet file, normalizing to 'time' and 'value' columns."""
-    if source == "brk":
+def load_metric(name: str, source: str = "brk", resolution: str = "daily") -> pd.DataFrame:
+    """Load metric from parquet file, normalizing to 'time' and 'value' columns.
+
+    For resolution='hourly': loads from hourly dir if metric supports h1,
+    otherwise falls back to daily BRK data.
+    """
+    if resolution == "hourly" and name in HOURLY_METRICS:
+        path = HOURLY_DATA_DIR / f"{name}.parquet"
+        if not path.exists():
+            # Fall back to daily
+            path = RAW_DATA_DIR / f"{name}.parquet"
+    elif resolution == "hourly" and source == "glassnode":
+        path = GLASSNODE_HOURLY_DIR / f"{name}.parquet"
+        if not path.exists():
+            # Fall back to daily glassnode
+            path = GLASSNODE_DIR / f"{name}.parquet"
+    elif source == "brk":
         path = RAW_DATA_DIR / f"{name}.parquet"
     elif source == "glassnode":
         path = GLASSNODE_DIR / f"{name}.parquet"
@@ -240,12 +284,28 @@ def calculate_price_context(data: dict) -> dict:
         else:
             zone, zone_color = 'EXTREME BULL', '#a855f7'
     
+    # Calculate % changes
+    price_df = data.get('price', pd.DataFrame())
+    change_24h = None
+    change_7d = None
+    if not price_df.empty and price_val is not None:
+        if len(price_df) >= 2:
+            prev = price_df.iloc[-2]['value']
+            if prev and prev > 0:
+                change_24h = (price_val - prev) / prev * 100
+        if len(price_df) >= 8:
+            prev_7d = price_df.iloc[-8]['value']
+            if prev_7d and prev_7d > 0:
+                change_7d = (price_val - prev_7d) / prev_7d * 100
+
     return {
         'price': price_val,
         'price_time': price_time,
         'levels': levels,
         'zone': zone,
-        'zone_color': zone_color
+        'zone_color': zone_color,
+        'change_24h': change_24h,
+        'change_7d': change_7d,
     }
 
 
@@ -595,15 +655,27 @@ def calculate_checkmate_signal(data: dict) -> dict:
     return metrics
 
 
-def calculate_buy_the_dip(data: dict) -> dict:
+def calculate_buy_the_dip(data: dict, resolution: str = "daily") -> dict:
     """Calculate Buy The Dip checklist (James Check 5 conditions)."""
     metrics = {'conditions': [], 'met_count': 0}
     
     # Load Glassnode derivatives for funding/liquidations
-    funding_df = load_metric('funding_rate', source='glassnode')
-    long_liq_df = load_metric('liquidations_long', source='glassnode')
-    short_liq_df = load_metric('liquidations_short', source='glassnode')
-    
+    # Hourly Glassnode data often has trailing zeros — fall back to daily if latest is 0/null
+    funding_df = load_metric('funding_rate', source='glassnode', resolution=resolution)
+    long_liq_df = load_metric('liquidations_long', source='glassnode', resolution=resolution)
+    short_liq_df = load_metric('liquidations_short', source='glassnode', resolution=resolution)
+
+    if resolution == "hourly":
+        funding_val, _ = get_latest(funding_df)
+        long_liq_val, _ = get_latest(long_liq_df)
+        short_liq_val, _ = get_latest(short_liq_df)
+        if not funding_val:
+            funding_df = load_metric('funding_rate', source='glassnode', resolution='daily')
+        if not long_liq_val:
+            long_liq_df = load_metric('liquidations_long', source='glassnode', resolution='daily')
+        if not short_liq_val:
+            short_liq_df = load_metric('liquidations_short', source='glassnode', resolution='daily')
+
     # Derive liquidation ratio
     long_liq, _ = get_latest(long_liq_df)
     short_liq, _ = get_latest(short_liq_df)
@@ -646,7 +718,7 @@ def calculate_buy_the_dip(data: dict) -> dict:
     return metrics
 
 
-def calculate_8_metric_exit_detector(data: dict) -> dict:
+def calculate_8_metric_exit_detector(data: dict, resolution: str = "daily") -> dict:
     """
     James Check 8-Metric Cycle Extreme Detector (Masterclass #19)
     Detects when 4/8 (caution) or 6/8 (high risk) metrics flash extreme levels.
@@ -656,7 +728,12 @@ def calculate_8_metric_exit_detector(data: dict) -> dict:
     # Load additional metrics needed
     price_df = data.get('price', pd.DataFrame())
     price_200sma_df = data.get('price_200d_sma', pd.DataFrame())
-    funding_df = load_metric('funding_rate', source='glassnode')
+    funding_df = load_metric('funding_rate', source='glassnode', resolution=resolution)
+    # Fall back to daily if hourly funding has trailing zeros
+    if resolution == "hourly":
+        fv, _ = get_latest(funding_df)
+        if not fv:
+            funding_df = load_metric('funding_rate', source='glassnode', resolution='daily')
 
     # Calculate Mayer Multiple as time series
     if not price_df.empty and not price_200sma_df.empty:
@@ -868,15 +945,139 @@ def calculate_lth_distribution_signal(data: dict) -> dict:
 
 
 # =============================================================================
+# HOURLY SMOOTHING
+# =============================================================================
+
+def smooth_hourly_data(data: dict, window: int) -> dict:
+    """Apply rolling MA to key metrics in data dict, return new dict.
+
+    Only smooths the signal-driving metrics listed in SMOOTH_METRICS.
+    Other metrics pass through unchanged.
+    """
+    smoothed = dict(data)  # shallow copy
+    for metric in SMOOTH_METRICS:
+        df = data.get(metric, pd.DataFrame())
+        if df.empty or len(df) < window:
+            continue
+        sdf = df.copy()
+        sdf['value'] = sdf['value'].rolling(window, min_periods=max(1, window // 2)).mean()
+        smoothed[metric] = sdf.dropna(subset=['value'])
+    return smoothed
+
+
+def calculate_smoothed_hourly(verbose: bool = False):
+    """Run smoothed variants of hourly signal calculations.
+
+    For each window in SMOOTHING_WINDOWS, smooths the raw hourly data
+    and re-runs all signal calculations, saving results with an MA suffix.
+    """
+    print("\n" + "=" * 50)
+    print("Smoothed Hourly Signal Variants")
+    print("=" * 50)
+
+    # Load raw hourly data once
+    metrics_needed = [
+        'price', 'mvrv', 'mvrv_z', 'mvrv_sth', 'mvrv_lth', 'aviv',
+        'nupl', 'nupl_lth', 'nupl_sth', 'market_cap',
+        'realized_price', 'true_market_mean_price', 'vaulted_price', 'realized_price_sth',
+        'supply_lth', 'supply_sth', 'supply_total', 'supply_in_profit', 'supply_in_loss',
+        'sopr', 'sopr_sth', 'sopr_lth', 'sopr_adjusted',
+        'realized_profit', 'realized_loss', 'net_realized_pnl',
+        'liveliness', 'coindays_destroyed',
+        'puell_multiple', 'difficulty', 'thermo_cap',
+        'unrealized_profit', 'unrealized_loss',
+        'sell_side_risk', 'reserve_risk', 'price_200d_sma'
+    ]
+
+    print("\nLoading raw hourly metrics...")
+    data = {}
+    latest_time = None
+    hourly_loaded = []
+
+    for m in metrics_needed:
+        df = load_metric(m, resolution="hourly")
+        data[m] = df
+        _, ts = get_latest(df)
+        if m in HOURLY_METRICS:
+            hourly_path = HOURLY_DATA_DIR / f"{m}.parquet"
+            if hourly_path.exists():
+                hourly_loaded.append(m)
+        if ts and (not latest_time or ts > latest_time):
+            latest_time = ts
+
+    print(f"  Loaded {len(hourly_loaded)} hourly metrics, latest: {latest_time}")
+
+    for window in SMOOTHING_WINDOWS:
+        print(f"\n--- MA-{window} ({window}h smoothing) ---")
+        smoothed_data = smooth_hourly_data(data, window)
+
+        # Run all signal calculations on smoothed data
+        results = {
+            'meta': {
+                'calculated_at': datetime.now().isoformat(),
+                'data_as_of': latest_time.isoformat() if latest_time else None,
+                'resolution': 'hourly',
+                'smoothing': f'MA-{window}',
+                'smoothing_window': window,
+                'smoothed_metrics': SMOOTH_METRICS,
+                'hourly_metrics': sorted(hourly_loaded),
+            },
+            'price_context': calculate_price_context(smoothed_data),
+            'valuation': calculate_valuation_metrics(smoothed_data),
+            'sopr': calculate_sopr_metrics(smoothed_data),
+            'supply': calculate_supply_metrics(smoothed_data),
+            'profitability': calculate_profitability_metrics(smoothed_data),
+            'liveliness': calculate_liveliness_metrics(smoothed_data),
+            'miner': calculate_miner_metrics(smoothed_data),
+            'checkmate': calculate_checkmate_signal(smoothed_data),
+            'buy_the_dip': calculate_buy_the_dip(smoothed_data, resolution="hourly"),
+            'exit_8_metric': calculate_8_metric_exit_detector(smoothed_data, resolution="hourly"),
+            'sth_mvrv_zones': calculate_sth_mvrv_zones(smoothed_data),
+            'lth_distribution': calculate_lth_distribution_signal(smoothed_data),
+        }
+
+        results['entry_signals'] = [evaluate_signal(s, smoothed_data) for s in ENTRY_SIGNALS]
+        results['exit_signals'] = [evaluate_signal(s, smoothed_data) for s in EXIT_SIGNALS]
+
+        z_scores = {}
+        for metric in ['mvrv', 'sopr', 'nupl', 'realized_loss', 'realized_profit', 'liveliness']:
+            df = smoothed_data.get(metric, pd.DataFrame())
+            if not df.empty:
+                z_scores[metric] = {
+                    'z_365': calculate_z_score(df, 365),
+                    'z_90': calculate_z_score(df, 90)
+                }
+        results['z_scores'] = z_scores
+
+        save_results(results, resolution="hourly", suffix=f"_ma{window}")
+
+        # Print quick summary
+        btd = results['buy_the_dip']
+        cm = results['checkmate']
+        lth = results['lth_distribution']
+        print(f"  Buy The Dip: {btd['met_count']}/{btd['total']} → {btd['signal']}")
+        print(f"  Checkmate:   {cm['score']}/{cm['total']} → {cm['signal']}")
+        print(f"  LTH Dist:    {lth['signal']}")
+
+    print(f"\n✅ All {len(SMOOTHING_WINDOWS)} smoothed variants saved!")
+
+
+# =============================================================================
 # MAIN CALCULATION
 # =============================================================================
 
-def calculate_all(verbose: bool = False) -> dict:
-    """Calculate all metrics and signals."""
+def calculate_all(verbose: bool = False, resolution: str = "daily") -> dict:
+    """Calculate all metrics and signals.
+
+    Args:
+        verbose: Print detailed metric loading info.
+        resolution: 'daily' or 'hourly'. Hourly loads h1 data where available,
+                    falls back to daily for metrics without h1 support.
+    """
     print("=" * 50)
-    print("Signal Calculator")
+    print(f"Signal Calculator ({resolution})")
     print("=" * 50)
-    
+
     # Load all raw metrics
     metrics_needed = [
         'price', 'mvrv', 'mvrv_z', 'mvrv_sth', 'mvrv_lth', 'aviv',
@@ -890,24 +1091,39 @@ def calculate_all(verbose: bool = False) -> dict:
         'unrealized_profit', 'unrealized_loss',
         'sell_side_risk', 'reserve_risk', 'price_200d_sma'
     ]
-    
-    print("\nLoading raw metrics...")
+
+    print(f"\nLoading raw metrics (resolution={resolution})...")
+    if resolution == "hourly":
+        print(f"  H1 metrics: {', '.join(sorted(HOURLY_METRICS))}")
+        print(f"  Others fall back to daily BRK data")
+
     data = {}
+    hourly_loaded = []
     latest_time = None
-    
+
     for m in metrics_needed:
-        df = load_metric(m)
+        df = load_metric(m, resolution=resolution)
         data[m] = df
         val, ts = get_latest(df)
-        
+
+        # Track which metrics actually loaded from hourly
+        if resolution == "hourly" and m in HOURLY_METRICS:
+            hourly_path = HOURLY_DATA_DIR / f"{m}.parquet"
+            if hourly_path.exists():
+                hourly_loaded.append(m)
+
         if verbose and val is not None:
-            print(f"  ✓ {m}: {val:.6f}")
+            src_tag = " [H1]" if m in hourly_loaded else ""
+            print(f"  ✓ {m}: {val:.6f}{src_tag}")
         elif verbose:
             print(f"  ✗ {m}")
-        
+
         if ts and (not latest_time or ts > latest_time):
             latest_time = ts
-    
+
+    if resolution == "hourly":
+        print(f"  Loaded {len(hourly_loaded)}/{len(HOURLY_METRICS)} hourly metrics")
+
     print(f"\nLatest data: {latest_time}")
     
     # Calculate all metric groups
@@ -916,7 +1132,9 @@ def calculate_all(verbose: bool = False) -> dict:
     results = {
         'meta': {
             'calculated_at': datetime.now().isoformat(),
-            'data_as_of': latest_time.isoformat() if latest_time else None
+            'data_as_of': latest_time.isoformat() if latest_time else None,
+            'resolution': resolution,
+            'hourly_metrics': sorted(hourly_loaded) if resolution == "hourly" else [],
         },
         'price_context': calculate_price_context(data),
         'valuation': calculate_valuation_metrics(data),
@@ -926,8 +1144,8 @@ def calculate_all(verbose: bool = False) -> dict:
         'liveliness': calculate_liveliness_metrics(data),
         'miner': calculate_miner_metrics(data),
         'checkmate': calculate_checkmate_signal(data),
-        'buy_the_dip': calculate_buy_the_dip(data),
-        'exit_8_metric': calculate_8_metric_exit_detector(data),
+        'buy_the_dip': calculate_buy_the_dip(data, resolution=resolution),
+        'exit_8_metric': calculate_8_metric_exit_detector(data, resolution=resolution),
         'sth_mvrv_zones': calculate_sth_mvrv_zones(data),
         'lth_distribution': calculate_lth_distribution_signal(data)
     }
@@ -952,8 +1170,14 @@ def calculate_all(verbose: bool = False) -> dict:
     return results
 
 
-def save_results(results: dict):
-    """Save calculated results to parquet files."""
+def save_results(results: dict, resolution: str = "daily", suffix: str = ""):
+    """Save calculated results to parquet files.
+
+    Args:
+        results: Calculated signal results dict.
+        resolution: 'daily' or 'hourly'.
+        suffix: Extra suffix for smoothed variants (e.g. '_ma4').
+    """
     print("\nSaving results...")
 
     # Custom JSON encoder to handle datetime/numpy while preserving booleans
@@ -971,32 +1195,34 @@ def save_results(results: dict):
         raise TypeError(f"Type {type(obj)} not serializable")
 
     # Save main dashboard context as JSON (for easy reading)
-    context_path = SIGNALS_DIR / "dashboard_context.json"
+    res_suffix = "_hourly" if resolution == "hourly" else ""
+    full_suffix = f"{res_suffix}{suffix}"
+    context_path = SIGNALS_DIR / f"dashboard_context{full_suffix}.json"
     with open(context_path, 'w') as f:
         json.dump(results, f, indent=2, default=json_serializer)
     print(f"  ✓ {context_path}")
     
     # Save entry signals
     entry_df = pd.DataFrame(results['entry_signals'])
-    entry_path = SIGNALS_DIR / "entry_signals.parquet"
+    entry_path = SIGNALS_DIR / f"entry_signals{full_suffix}.parquet"
     entry_df.to_parquet(entry_path)
     print(f"  ✓ {entry_path}")
-    
+
     # Save exit signals
     exit_df = pd.DataFrame(results['exit_signals'])
-    exit_path = SIGNALS_DIR / "exit_signals.parquet"
+    exit_path = SIGNALS_DIR / f"exit_signals{full_suffix}.parquet"
     exit_df.to_parquet(exit_path)
     print(f"  ✓ {exit_path}")
-    
+
     # Save buy the dip conditions
     btd_df = pd.DataFrame(results['buy_the_dip']['conditions'])
-    btd_path = SIGNALS_DIR / "buy_the_dip.parquet"
+    btd_path = SIGNALS_DIR / f"buy_the_dip{full_suffix}.parquet"
     btd_df.to_parquet(btd_path)
     print(f"  ✓ {btd_path}")
-    
+
     # Save checkmate conditions
     cm_df = pd.DataFrame(results['checkmate']['conditions'])
-    cm_path = SIGNALS_DIR / "checkmate.parquet"
+    cm_path = SIGNALS_DIR / f"checkmate{full_suffix}.parquet"
     cm_df.to_parquet(cm_path)
     print(f"  ✓ {cm_path}")
     
@@ -1005,10 +1231,25 @@ def save_results(results: dict):
 
 def main():
     verbose = '--verbose' in sys.argv or '-v' in sys.argv
-    
-    results = calculate_all(verbose=verbose)
-    save_results(results)
-    
+
+    # Parse --resolution argument
+    resolution = "daily"
+    for i, arg in enumerate(sys.argv):
+        if arg == '--resolution' and i + 1 < len(sys.argv):
+            resolution = sys.argv[i + 1]
+            break
+
+    if resolution not in ("daily", "hourly"):
+        print(f"Unknown resolution: {resolution}. Use 'daily' or 'hourly'.")
+        sys.exit(1)
+
+    results = calculate_all(verbose=verbose, resolution=resolution)
+    save_results(results, resolution=resolution)
+
+    # Run smoothed variants for hourly resolution
+    if resolution == "hourly":
+        calculate_smoothed_hourly(verbose=verbose)
+
     # Print summary
     print("\n" + "=" * 50)
     print("SUMMARY")

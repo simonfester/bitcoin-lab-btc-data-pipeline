@@ -204,7 +204,7 @@ def check_data_quality():
     return True
 
 
-def run_calculations():
+def run_calculations(include_hourly: bool = True):
     """Run signal calculations."""
     print_section("STEP 6: Calculate Trading Signals")
 
@@ -214,11 +214,25 @@ def run_calculations():
         print("❌ calculate.py not found")
         sys.exit(1)
 
+    # Daily calculations (always run)
     run_command(
         ["python", str(calc_script)],
-        "Computing all metrics and signals",
+        "Computing daily metrics and signals",
         critical=True
     )
+
+    # Hourly calculations (for dashboard toggle)
+    if include_hourly:
+        hourly_dir = PROJECT_ROOT / "data" / "bl" / "hourly"
+        has_hourly_data = hourly_dir.exists() and any(hourly_dir.glob("*.parquet"))
+        if has_hourly_data:
+            run_command(
+                ["python", str(calc_script), "--resolution", "hourly"],
+                "Computing hourly metrics and signals",
+                critical=False
+            )
+        else:
+            print("⏭️  No hourly data found - skipping hourly calculation")
 
 
 def generate_dashboards(open_browser: bool = True):
@@ -327,7 +341,7 @@ Examples:
         print_section("STEPS 1-5: Data Sync & Quality Checks (SKIPPED)")
 
     # Step 6: Run calculations
-    run_calculations()
+    run_calculations(include_hourly=not args.skip_hourly)
 
     # Step 7: Generate dashboards
     generate_dashboards(open_browser=not args.no_open)

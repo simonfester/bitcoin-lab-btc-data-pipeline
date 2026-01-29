@@ -40,6 +40,7 @@ Usage:
     ./run.py dashboard --skip-hourly  # Skip hourly data sync (saves quota)
     ./run.py dashboard-quick      # Skip sync, just calculate and open dashboard
     ./run.py dashboard-quality    # Check data quality only
+    ./run.py calculate-hourly     # Calculate signals using hourly data + smoothed variants (MA-4/6/8/12)
     === BACKTEST DATABASE COMMANDS ===
     ./run.py backtest-stats       # Show database statistics
     ./run.py backtest-list        # List recent backtest runs
@@ -107,6 +108,7 @@ def print_usage():
     print("  dashboard         Full pipeline: sync all → quality checks → calculate → open")
     print("  dashboard-quick   Skip sync, just calculate and open dashboard")
     print("  dashboard-quality Check data freshness and quality only")
+    print("  calculate-hourly  Calculate hourly signals + smoothed MA-4/6/8/12 variants")
     print("")
     print("  === BACKTEST DATABASE COMMANDS ===")
     print("  backtest-stats      Show database statistics")
@@ -333,6 +335,15 @@ if __name__ == "__main__":
             sys.executable,
             "scripts/sync_and_dashboard.py",
             "--skip-sync"
+        ])
+
+    elif cmd == "calculate-hourly":
+        """Calculate signals using hourly data where available"""
+        import subprocess
+        subprocess.run([
+            sys.executable,
+            "scripts/calculate.py",
+            "--resolution", "hourly"
         ])
 
     elif cmd == "dashboard-quality":

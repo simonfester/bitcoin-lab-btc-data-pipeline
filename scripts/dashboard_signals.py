@@ -41,13 +41,14 @@ COINBASE_API = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
 # DATA LOADING
 # =============================================================================
 
-def load_dashboard_context() -> dict:
+def load_dashboard_context(resolution: str = "daily") -> dict:
     """Load pre-computed dashboard context from JSON."""
-    context_path = SIGNALS_DIR / "dashboard_context.json"
+    suffix = "_hourly" if resolution == "hourly" else ""
+    context_path = SIGNALS_DIR / f"dashboard_context{suffix}.json"
     if not context_path.exists():
         raise FileNotFoundError(
             f"Dashboard context not found: {context_path}\n"
-            "Run 'python calculate.py' first to generate signals."
+            f"Run 'python calculate.py{' --resolution hourly' if resolution == 'hourly' else ''}' first."
         )
 
     with open(context_path, 'r') as f:
@@ -435,8 +436,38 @@ def generate_signals_card(signals: list, title: str, icon: str) -> str:
 # DASHBOARD HTML GENERATION
 # =============================================================================
 
-def generate_signals_dashboard_html(ctx: dict, live_price: float = None) -> str:
-    """Generate complete signals dashboard HTML."""
+def generate_signals_content(ctx: dict) -> str:
+    """Generate the signal cards content (without page chrome)."""
+    return f'''
+        <!-- BUY SIGNALS SECTION -->
+        <div class="section">
+            <div class="section-title buy">🟢 Entry Signals — When to Buy</div>
+            <div class="grid">
+                {generate_checkmate_card(ctx)}
+                {generate_btd_card(ctx)}
+                {generate_signals_card(ctx.get('entry_signals', []), 'Additional Entry Signals', '🟢')}
+            </div>
+        </div>
+
+        <!-- SELL SIGNALS SECTION -->
+        <div class="section">
+            <div class="section-title sell">🔴 Exit Signals — When to Sell/Reduce</div>
+            <div class="grid">
+                {generate_8_metric_exit_card(ctx)}
+                {generate_sth_zones_card(ctx)}
+                {generate_lth_distribution_card(ctx)}
+                {generate_signals_card(ctx.get('exit_signals', []), 'Additional Exit Signals', '🔴')}
+            </div>
+        </div>
+    '''
+
+
+def generate_signals_dashboard_html(ctx: dict, live_price: float = None, hourly_ctx: dict = None) -> str:
+    """Generate complete signals dashboard HTML.
+
+    If hourly_ctx is provided, renders both daily and hourly views
+    with a toggle button.
+    """
 
     # Get timestamps
     data_time = ctx.get('data_timestamp', 'Unknown')
@@ -446,6 +477,92 @@ def generate_signals_dashboard_html(ctx: dict, live_price: float = None) -> str:
     current_price = ctx.get('price', {}).get('current')
     if live_price:
         current_price = live_price
+
+    has_hourly = hourly_ctx is not None
+
+    # Hourly metadata
+    hourly_data_time = ""
+    hourly_calc_time = ""
+    if has_hourly:
+        hourly_data_time = hourly_ctx.get('data_timestamp', 'Unknown')
+        hourly_calc_time = hourly_ctx.get('calculation_timestamp', 'Unknown')
+        h_meta = hourly_ctx.get('meta', {})
+        hourly_metrics_list = h_meta.get('hourly_metrics', [])
+        if not hourly_data_time or hourly_data_time == 'Unknown':
+            try:
+                hourly_data_time = datetime.fromisoformat(h_meta.get('data_as_of', '')).strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                hourly_data_time = h_meta.get('data_as_of', 'Unknown')
+        if not hourly_calc_time or hourly_calc_time == 'Unknown':
+            try:
+                hourly_calc_time = datetime.fromisoformat(h_meta.get('calculated_at', '')).strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                hourly_calc_time = h_meta.get('calculated_at', 'Unknown')
+
+    # Toggle HTML
+    toggle_html = ""
+    if has_hourly:
+        toggle_html = f'''
+        <div class="resolution-toggle">
+            <button id="btn-daily" class="toggle-btn active" onclick="showResolution('daily')">Daily</button>
+            <button id="btn-hourly" class="toggle-btn" onclick="showResolution('hourly')">Hourly</button>
+        </div>
+        <div id="meta-daily" class="meta">
+            Data as of: {data_time} | Calculated: {calc_time}
+            {' | Live price enabled' if live_price else ''}
+        </div>
+        <div id="meta-hourly" class="meta" style="display:none;">
+            Data as of: {hourly_data_time} | Calculated: {hourly_calc_time}
+            {' | Live price enabled' if live_price else ''}
+        </div>
+        '''
+    else:
+        toggle_html = f'''
+        <div class="meta">
+            Data as of: {data_time} | Calculated: {calc_time}
+            {' | Live price enabled' if live_price else ''}
+        </div>
+        '''
+
+    # Generate both content blocks
+    daily_content = generate_signals_content(ctx)
+    hourly_content = generate_signals_content(hourly_ctx) if has_hourly else ""
+
+    hourly_block = f'''
+        <div id="content-hourly" style="display:none;">
+            {hourly_content}
+        </div>
+    ''' if has_hourly else ''
+
+    # Toggle JS
+    toggle_js = '''
+    <script>
+    function showResolution(res) {
+        var daily = document.getElementById('content-daily');
+        var hourly = document.getElementById('content-hourly');
+        var btnDaily = document.getElementById('btn-daily');
+        var btnHourly = document.getElementById('btn-hourly');
+        var metaDaily = document.getElementById('meta-daily');
+        var metaHourly = document.getElementById('meta-hourly');
+
+        if (res === 'hourly' && hourly) {
+            daily.style.display = 'none';
+            hourly.style.display = 'block';
+            btnDaily.classList.remove('active');
+            btnHourly.classList.add('active');
+            if (metaDaily) metaDaily.style.display = 'none';
+            if (metaHourly) metaHourly.style.display = 'block';
+        } else {
+            daily.style.display = 'block';
+            if (hourly) hourly.style.display = 'none';
+            btnDaily.classList.add('active');
+            if (btnHourly) btnHourly.classList.remove('active');
+            if (metaDaily) metaDaily.style.display = 'block';
+            if (metaHourly) metaHourly.style.display = 'none';
+        }
+    }
+    </script>
+    ''' if has_hourly else ''
 
     html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -501,6 +618,32 @@ def generate_signals_dashboard_html(ctx: dict, live_price: float = None) -> str:
         .header .nav a:hover {{
             background: rgba(255, 255, 255, 0.25);
             transform: translateY(-2px);
+        }}
+        .resolution-toggle {{
+            display: inline-flex;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }}
+        .toggle-btn {{
+            padding: 8px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.6);
+        }}
+        .toggle-btn.active {{
+            background: #fbbf24;
+            color: #1e3c72;
+        }}
+        .toggle-btn:hover:not(.active) {{
+            color: white;
         }}
         .container {{
             max-width: 1600px;
@@ -561,10 +704,7 @@ def generate_signals_dashboard_html(ctx: dict, live_price: float = None) -> str:
 <body>
     <div class="header">
         <h1>🎯 Bitcoin Trading Signals</h1>
-        <div class="meta">
-            Data as of: {data_time} | Calculated: {calc_time}
-            {' | Live price enabled' if live_price else ''}
-        </div>
+        {toggle_html}
         <div class="price">{format_price(current_price)}</div>
         <div class="nav">
             <a href="dashboard.html">← Back to Dashboard</a>
@@ -573,32 +713,17 @@ def generate_signals_dashboard_html(ctx: dict, live_price: float = None) -> str:
     </div>
 
     <div class="container">
-        <!-- BUY SIGNALS SECTION -->
-        <div class="section">
-            <div class="section-title buy">🟢 Entry Signals — When to Buy</div>
-            <div class="grid">
-                {generate_checkmate_card(ctx)}
-                {generate_btd_card(ctx)}
-                {generate_signals_card(ctx.get('entry_signals', []), 'Additional Entry Signals', '🟢')}
-            </div>
+        <div id="content-daily">
+            {daily_content}
         </div>
-
-        <!-- SELL SIGNALS SECTION -->
-        <div class="section">
-            <div class="section-title sell">🔴 Exit Signals — When to Sell/Reduce</div>
-            <div class="grid">
-                {generate_8_metric_exit_card(ctx)}
-                {generate_sth_zones_card(ctx)}
-                {generate_lth_distribution_card(ctx)}
-                {generate_signals_card(ctx.get('exit_signals', []), 'Additional Exit Signals', '🔴')}
-            </div>
-        </div>
+        {hourly_block}
     </div>
 
     <div class="footer">
         <p>James Check Framework Implementation | Combining the 6 Pillars into Actionable Signals</p>
         <p>Run <code>python scripts/calculate.py</code> to update signals</p>
     </div>
+    {toggle_js}
 </body>
 </html>
 '''
@@ -627,7 +752,15 @@ def main():
     while True:
         try:
             print("Loading dashboard context...")
-            ctx = load_dashboard_context()
+            ctx = load_dashboard_context("daily")
+
+            # Try loading hourly context (optional)
+            hourly_ctx = None
+            try:
+                hourly_ctx = load_dashboard_context("hourly")
+                print("  ✓ Hourly context loaded")
+            except FileNotFoundError:
+                print("  - No hourly context (run: python scripts/calculate.py --resolution hourly)")
 
             # Fetch live price if requested
             live_price = None
@@ -638,7 +771,7 @@ def main():
                     print(f"  Live price: ${live_price:,.0f}")
 
             print("Generating signals dashboard...")
-            html = generate_signals_dashboard_html(ctx, live_price)
+            html = generate_signals_dashboard_html(ctx, live_price, hourly_ctx=hourly_ctx)
 
             OUTPUT_PATH.write_text(html)
             print(f"✓ Dashboard saved to: {OUTPUT_PATH}")
