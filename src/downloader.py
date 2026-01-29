@@ -26,9 +26,89 @@ from dataclasses import dataclass, field, asdict
 
 import yaml
 import requests
+from requests.exceptions import HTTPError, ConnectionError, Timeout
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pandas as pd
+
+
+# =============================================================================
+# API ERROR HANDLING
+# =============================================================================
+
+class APIError(Exception):
+    """Base class for API errors with HTTP status context."""
+    def __init__(self, status_code: int, message: str, metric: str = "", retryable: bool = False):
+        self.status_code = status_code
+        self.message = message
+        self.metric = metric
+        self.retryable = retryable
+        super().__init__(f"HTTP {status_code}: {message}")
+
+
+class InvalidParamsError(APIError):
+    """400 - Invalid parameters (wrong metric name, bad date format, etc.)."""
+    def __init__(self, message: str, metric: str = ""):
+        super().__init__(400, message, metric, retryable=False)
+
+
+class AuthenticationError(APIError):
+    """401 - Missing or invalid API token."""
+    def __init__(self, message: str, metric: str = ""):
+        super().__init__(401, message, metric, retryable=False)
+
+
+class ForbiddenError(APIError):
+    """403 - Forbidden (metric not available for your tier, quota exhausted)."""
+    def __init__(self, message: str, metric: str = ""):
+        super().__init__(403, message, metric, retryable=False)
+
+
+class NotFoundError(APIError):
+    """404 - Metric or endpoint not found."""
+    def __init__(self, message: str, metric: str = ""):
+        super().__init__(404, message, metric, retryable=False)
+
+
+class RateLimitError(APIError):
+    """429 - Rate limited, should retry after backoff."""
+    def __init__(self, message: str, metric: str = "", retry_after: int = 60):
+        self.retry_after = retry_after
+        super().__init__(429, message, metric, retryable=True)
+
+
+class ServerError(APIError):
+    """5xx - Transient server error, should retry."""
+    def __init__(self, status_code: int, message: str, metric: str = ""):
+        super().__init__(status_code, message, metric, retryable=True)
+
+
+def handle_http_error(response: requests.Response, metric: str = "") -> None:
+    """Parse HTTP error response and raise the appropriate typed exception."""
+    status = response.status_code
+
+    # Try to extract message from JSON body
+    try:
+        body = response.json()
+        message = body.get("message", body.get("error", response.text[:200]))
+    except (ValueError, KeyError):
+        message = response.text[:200] if response.text else response.reason
+
+    if status == 400:
+        raise InvalidParamsError(f"{metric}: {message}", metric)
+    elif status == 401:
+        raise AuthenticationError(f"Token invalid or missing: {message}", metric)
+    elif status == 403:
+        raise ForbiddenError(f"{metric}: {message} (check tier/quota)", metric)
+    elif status == 404:
+        raise NotFoundError(f"{metric}: endpoint not found", metric)
+    elif status == 429:
+        retry_after = int(response.headers.get("Retry-After", 60))
+        raise RateLimitError(f"Rate limited: {message}", metric, retry_after)
+    elif 500 <= status < 600:
+        raise ServerError(status, f"Server error: {message}", metric)
+    else:
+        raise APIError(status, f"Unexpected error: {message}", metric)
 
 # =============================================================================
 # CONFIGURATION
@@ -157,19 +237,17 @@ class BitcoinLabAPI:
     def get_user_info(self) -> dict:
         """Get user/quota information."""
         self._rate_limit_wait()
-        resp = self.session.get(f"{self.base_url}/v2/info/user_info")
+        resp = self.session.get(f"{self.base_url}/v2/info/user_info", timeout=30)
         if resp.status_code != 200:
-            data = resp.json()
-            raise ValueError(f"API Error ({resp.status_code}): {data.get('message', 'Unknown error')}")
+            handle_http_error(resp, "user_info")
         return resp.json()
-    
+
     def get_system_info(self) -> dict:
         """Get system/block information."""
         self._rate_limit_wait()
-        resp = self.session.get(f"{self.base_url}/v2/info/system_info")
+        resp = self.session.get(f"{self.base_url}/v2/info/system_info", timeout=30)
         if resp.status_code != 200:
-            data = resp.json()
-            raise ValueError(f"API Error ({resp.status_code}): {data.get('message', 'Unknown error')}")
+            handle_http_error(resp, "system_info")
         return resp.json()
     
     def fetch_metric(
@@ -242,11 +320,11 @@ class BitcoinLabAPI:
         data_field: str,
         from_time: str,
         to_time: str,
-        resolution: str
+        resolution: str,
+        max_retries: int = 3
     ) -> pd.DataFrame:
-        """Fetch a single chunk of data from the API."""
-        self._rate_limit_wait()
-        
+        """Fetch a single chunk of data from the API with retry logic."""
+        metric_name = f"{endpoint}/{data_field}"
         url = f"{self.base_url}/v2/{endpoint}/{data_field}"
         params = {
             "resolution": resolution,
@@ -254,12 +332,44 @@ class BitcoinLabAPI:
             "from_time": from_time,
             "to_time": to_time
         }
-        
-        logger.debug(f"Fetching {url} with params {params}")
-        
-        resp = self.session.get(url, params=params)
-        resp.raise_for_status()
-        
+
+        for attempt in range(max_retries):
+            self._rate_limit_wait()
+            logger.debug(f"Fetching {url} with params {params} (attempt {attempt + 1})")
+
+            try:
+                resp = self.session.get(url, params=params, timeout=120)
+            except (ConnectionError, Timeout) as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** (attempt + 1)
+                    logger.warning(f"  Connection error for {metric_name}, retrying in {wait}s: {e}")
+                    time.sleep(wait)
+                    continue
+                raise ServerError(0, f"Connection failed after {max_retries} attempts: {e}", metric_name)
+
+            if resp.status_code == 200:
+                break  # Success
+
+            # Handle retryable errors (429, 5xx)
+            if resp.status_code == 429:
+                retry_after = int(resp.headers.get("Retry-After", 60))
+                if attempt < max_retries - 1:
+                    logger.warning(f"  Rate limited on {metric_name}, waiting {retry_after}s...")
+                    time.sleep(retry_after)
+                    continue
+                handle_http_error(resp, metric_name)
+
+            if 500 <= resp.status_code < 600:
+                if attempt < max_retries - 1:
+                    wait = 2 ** (attempt + 1)
+                    logger.warning(f"  Server error {resp.status_code} for {metric_name}, retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+                handle_http_error(resp, metric_name)
+
+            # Non-retryable errors (400, 401, 403, 404) — fail immediately
+            handle_http_error(resp, metric_name)
+
         data = resp.json()
         
         if data.get("status") != "success":
@@ -471,17 +581,71 @@ class SyncEngine:
             logger.info(f"  → Added {rows_added} rows (total: {metric_state.row_count})")
             return True, rows_added, None
             
+        except AuthenticationError as e:
+            error_msg = str(e)
+            logger.error(f"  → AUTH ERROR syncing {metric.name}: {error_msg}")
+            logger.error("    Check your BITCOIN_LAB_TOKEN — stopping sync.")
+            metric_state.status = "auth_error"
+            metric_state.error = error_msg
+            metric_state.last_sync = datetime.now(timezone.utc).isoformat()
+            self.state.set_metric_state(metric.name, metric_state)
+            return False, 0, error_msg
+
+        except ForbiddenError as e:
+            error_msg = str(e)
+            logger.warning(f"  → FORBIDDEN {metric.name}: {error_msg}")
+            logger.warning("    Metric may require higher tier or quota exhausted.")
+            metric_state.status = "forbidden"
+            metric_state.error = error_msg
+            metric_state.last_sync = datetime.now(timezone.utc).isoformat()
+            self.state.set_metric_state(metric.name, metric_state)
+            return False, 0, error_msg
+
+        except RateLimitError as e:
+            error_msg = str(e)
+            logger.warning(f"  → RATE LIMITED {metric.name}: retry after {e.retry_after}s")
+            metric_state.status = "rate_limited"
+            metric_state.error = error_msg
+            metric_state.last_sync = datetime.now(timezone.utc).isoformat()
+            self.state.set_metric_state(metric.name, metric_state)
+            return False, 0, error_msg
+
+        except InvalidParamsError as e:
+            error_msg = str(e)
+            logger.warning(f"  → INVALID PARAMS {metric.name}: {error_msg}")
+            metric_state.status = "invalid_params"
+            metric_state.error = error_msg
+            metric_state.last_sync = datetime.now(timezone.utc).isoformat()
+            self.state.set_metric_state(metric.name, metric_state)
+            return False, 0, error_msg
+
+        except NotFoundError as e:
+            error_msg = str(e)
+            logger.warning(f"  → NOT FOUND {metric.name}: endpoint does not exist")
+            metric_state.status = "not_found"
+            metric_state.error = error_msg
+            metric_state.last_sync = datetime.now(timezone.utc).isoformat()
+            self.state.set_metric_state(metric.name, metric_state)
+            return False, 0, error_msg
+
+        except ServerError as e:
+            error_msg = str(e)
+            logger.error(f"  → SERVER ERROR {metric.name}: {error_msg}")
+            metric_state.status = "server_error"
+            metric_state.error = error_msg
+            metric_state.last_sync = datetime.now(timezone.utc).isoformat()
+            self.state.set_metric_state(metric.name, metric_state)
+            return False, 0, error_msg
+
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"  → Error syncing {metric.name}: {error_msg}")
-            
+            logger.error(f"  → UNEXPECTED ERROR syncing {metric.name}: {error_msg}")
             metric_state.status = "error"
             metric_state.error = error_msg
             metric_state.last_sync = datetime.now(timezone.utc).isoformat()
             self.state.set_metric_state(metric.name, metric_state)
-            
             return False, 0, error_msg
-    
+
     def sync_all(
         self,
         from_time: Optional[str] = None,
@@ -513,23 +677,38 @@ class SyncEngine:
         }
         
         consecutive_errors = 0
-        
+
         for metric in self.metrics:
             success, rows, error = self.sync_metric(metric, from_time, to_time)
-            
+
             if success:
                 results["metrics_success"] += 1
                 results["rows_added"] += rows
                 consecutive_errors = 0
             else:
                 results["metrics_failed"] += 1
-                results["errors"].append({"metric": metric.name, "error": error})
+                metric_state = self.state.get_metric_state(metric.name)
+                results["errors"].append({
+                    "metric": metric.name,
+                    "error": error,
+                    "status": metric_state.status
+                })
+
+                # Auth errors: stop immediately — all subsequent requests will fail too
+                if metric_state.status == "auth_error":
+                    logger.error("Authentication failed — stopping all syncs.")
+                    break
+
+                # Rate limit: stop — we need to wait before any more requests
+                if metric_state.status == "rate_limited":
+                    logger.warning("Rate limited — stopping sync. Retry later.")
+                    break
+
                 consecutive_errors += 1
-                
                 if consecutive_errors >= max_errors:
                     logger.error(f"Too many consecutive errors ({max_errors}), stopping.")
                     break
-            
+
             # Save state after each metric
             self._save_state()
         

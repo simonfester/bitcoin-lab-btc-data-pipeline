@@ -26,6 +26,7 @@ from typing import Optional, List, Dict
 from dataclasses import dataclass, field, asdict
 
 import requests
+from requests.exceptions import ConnectionError, Timeout
 import pandas as pd
 
 # =============================================================================
@@ -198,67 +199,104 @@ class BRKAPI:
             "User-Agent": "bitcoin-lab-pipeline/1.0"
         })
     
+    def _request_with_retry(self, url: str, params: dict = None, timeout: int = 30, max_retries: int = 3) -> requests.Response:
+        """Make a GET request with retry logic for transient errors."""
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(url, params=params, timeout=timeout)
+            except (ConnectionError, Timeout) as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** (attempt + 1)
+                    logger.warning(f"  Connection error, retrying in {wait}s: {e}")
+                    time.sleep(wait)
+                    continue
+                raise ValueError(f"Connection failed after {max_retries} attempts: {e}")
+
+            if response.status_code == 200:
+                return response
+
+            # 5xx: retry
+            if 500 <= response.status_code < 600:
+                if attempt < max_retries - 1:
+                    wait = 2 ** (attempt + 1)
+                    logger.warning(f"  Server error {response.status_code}, retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+
+            # 429: retry with backoff
+            if response.status_code == 429:
+                if attempt < max_retries - 1:
+                    wait = int(response.headers.get("Retry-After", 30))
+                    logger.warning(f"  Rate limited, waiting {wait}s...")
+                    time.sleep(wait)
+                    continue
+
+            # Non-retryable (4xx except 429) or exhausted retries — return as-is
+            return response
+
+        return response
+
     def list_metrics(self, page: int = 0) -> list:
-        """
-        List available metrics from BRK API.
-        
-        Returns list of metric names.
-        """
+        """List available metrics from BRK API."""
         url = f"{self.base_url}/api/metrics/list"
         params = {"page": page} if page > 0 else {}
-        
+
         try:
-            response = self.session.get(url, params=params, timeout=30)
-            response.raise_for_status()
+            response = self._request_with_retry(url, params=params)
+            if response.status_code != 200:
+                logger.warning(f"Failed to list metrics: HTTP {response.status_code}")
+                return []
             data = response.json()
             return data.get('metrics', [])
         except Exception as e:
             logger.warning(f"Failed to list metrics: {e}")
             return []
-    
+
     def search_metrics(self, query: str, limit: int = 20) -> list:
-        """
-        Search for metrics matching a query.
-        
-        Returns list of matching metric names.
-        """
+        """Search for metrics matching a query."""
         url = f"{self.base_url}/api/metrics/search/{query}"
         params = {"limit": limit}
-        
+
         try:
-            response = self.session.get(url, params=params, timeout=30)
-            response.raise_for_status()
+            response = self._request_with_retry(url, params=params)
+            if response.status_code != 200:
+                logger.warning(f"Failed to search metrics: HTTP {response.status_code}")
+                return []
             return response.json()
         except Exception as e:
             logger.warning(f"Failed to search metrics: {e}")
             return []
-    
+
     def fetch_metric(self, brk_metric_name: str) -> pd.DataFrame:
         """
         Fetch complete metric data from BRK API.
-        
+
         NEW API format (next.bitview.space):
         /api/metric/{metric}/dateindex
-        
+
         Response format (MetricData):
         {"version": N, "total": N, "start": N, "end": N, "data": [...]}
-        
+
         Day 0 = 2008-01-03 (BRK_EPOCH)
-        
+
         Returns DataFrame with columns: [time, value]
         """
-        # New API endpoint format: /api/metric/{metric}/{index}
         url = f"{self.base_url}/api/metric/{brk_metric_name}/dateindex"
-        
         logger.debug(f"Fetching {url}")
-        
+
         try:
-            response = self.session.get(url, timeout=120)
+            response = self._request_with_retry(url, timeout=120)
             if response.status_code == 404:
-                logger.warning(f"Metric '{brk_metric_name}' not found on BRK API")
+                logger.warning(f"Metric '{brk_metric_name}' not found on BRK API (404)")
                 return pd.DataFrame(columns=["time", "value"])
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
+            if response.status_code != 200:
+                raise ValueError(
+                    f"BRK API error for {brk_metric_name}: HTTP {response.status_code} — "
+                    f"{response.text[:200] if response.text else response.reason}"
+                )
+        except ValueError:
+            raise
+        except Exception as e:
             raise ValueError(f"BRK API request failed for {brk_metric_name}: {e}")
         
         data = response.json()
@@ -458,15 +496,30 @@ class BRKSyncEngine:
             logger.info(f"  → Added {rows_added} rows (total: {metric_state.row_count})")
             return True, rows_added, None
             
+        except ValueError as e:
+            error_msg = str(e)
+            # Distinguish between "not found" and other errors
+            if "404" in error_msg or "not found" in error_msg.lower():
+                logger.warning(f"  → NOT FOUND {standard_name}: metric unavailable on BRK")
+                metric_state.status = "not_found"
+            elif "Connection failed" in error_msg or "timeout" in error_msg.lower():
+                logger.error(f"  → CONNECTION ERROR {standard_name}: {error_msg}")
+                metric_state.status = "connection_error"
+            else:
+                logger.error(f"  → API ERROR {standard_name}: {error_msg}")
+                metric_state.status = "error"
+            metric_state.error = error_msg
+            metric_state.last_sync = datetime.now(timezone.utc).isoformat()
+            self.state.set_metric_state(standard_name, metric_state)
+            return False, 0, error_msg
+
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"  → Error syncing {standard_name}: {error_msg}")
-            
+            logger.error(f"  → UNEXPECTED ERROR syncing {standard_name}: {error_msg}")
             metric_state.status = "error"
             metric_state.error = error_msg
             metric_state.last_sync = datetime.now(timezone.utc).isoformat()
             self.state.set_metric_state(standard_name, metric_state)
-            
             return False, 0, error_msg
     
     def sync_all(self, force_full: bool = False, max_errors: int = 10) -> dict:
