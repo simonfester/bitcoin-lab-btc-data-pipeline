@@ -47,7 +47,7 @@ metrics:
     priority: critical
     tier: 0
     description: "Total market capitalization"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # VALUATION METRICS (High - core on-chain signals)
@@ -67,7 +67,7 @@ metrics:
     priority: high
     tier: 1
     description: "MVRV Z-Score (standardized)"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: mvrv_lth
     endpoint: market_value_to_realized_value
@@ -75,7 +75,7 @@ metrics:
     priority: high
     tier: 2
     description: "MVRV for Long-Term Holders"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: mvrv_sth
     endpoint: market_value_to_realized_value
@@ -91,7 +91,7 @@ metrics:
     priority: high
     tier: 1
     description: "Network Value to Transaction ratio"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: velocity
     endpoint: network_value_to_transaction
@@ -99,7 +99,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Monetary velocity"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # PROFIT/LOSS METRICS (High - sentiment indicators)
@@ -135,7 +135,7 @@ metrics:
     priority: high
     tier: 1
     description: "Net Unrealized Profit/Loss"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: nupl_lth
     endpoint: net_unrealized_profit_loss
@@ -143,7 +143,7 @@ metrics:
     priority: high
     tier: 2
     description: "NUPL for Long-Term Holders"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: nupl_sth
     endpoint: net_unrealized_profit_loss
@@ -151,7 +151,7 @@ metrics:
     priority: high
     tier: 2
     description: "NUPL for Short-Term Holders"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: net_realized_pnl
     endpoint: net_realized_profit_loss
@@ -159,7 +159,7 @@ metrics:
     priority: high
     tier: 1
     description: "Net Realized Profit/Loss"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # SUPPLY METRICS (High - holder behavior)
@@ -171,7 +171,7 @@ metrics:
     priority: high
     tier: 1
     description: "Supply currently in profit"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: supply_in_profit_percent
     endpoint: supply_in_profitloss
@@ -179,7 +179,7 @@ metrics:
     priority: high
     tier: 1
     description: "Percentage of supply in profit"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: supply_in_loss
     endpoint: supply_in_profitloss
@@ -187,7 +187,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Supply currently in loss"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: supply_lth
     endpoint: supply_distribution
@@ -195,7 +195,7 @@ metrics:
     priority: high
     tier: 1
     description: "Long-Term Holder supply"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: supply_sth
     endpoint: supply_distribution
@@ -203,7 +203,7 @@ metrics:
     priority: high
     tier: 1
     description: "Short-Term Holder supply"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: supply_lth_sth_ratio
     endpoint: supply_distribution
@@ -211,7 +211,7 @@ metrics:
     priority: high
     tier: 1
     description: "LTH to STH supply ratio"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: supply_total
     endpoint: supply_distribution
@@ -219,7 +219,7 @@ metrics:
     priority: medium
     tier: 0
     description: "Total circulating supply"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # REALIZED CAP & PRICE (High - cost basis analysis)
@@ -231,7 +231,7 @@ metrics:
     priority: high
     tier: 1
     description: "Realized capitalization"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: realized_cap_lth
     endpoint: realizedcap
@@ -239,7 +239,7 @@ metrics:
     priority: medium
     tier: 2
     description: "Realized cap for LTH"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: realized_cap_sth
     endpoint: realizedcap
@@ -247,7 +247,7 @@ metrics:
     priority: medium
     tier: 2
     description: "Realized cap for STH"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: realized_price
     endpoint: realizedprice
@@ -255,7 +255,7 @@ metrics:
     priority: high
     tier: 1
     description: "Aggregate realized price (cost basis)"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: realized_price_lth
     endpoint: realizedprice
@@ -263,7 +263,7 @@ metrics:
     priority: medium
     tier: 2
     description: "Realized price for LTH"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: realized_price_sth
     endpoint: realizedprice
@@ -271,7 +271,7 @@ metrics:
     priority: medium
     tier: 2
     description: "Realized price for STH"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # COINTIME ECONOMICS (Medium - advanced analysis)
@@ -283,7 +283,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Network economic activity measure"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: vaultedness
     endpoint: cointime_statistics
@@ -291,7 +291,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Proportion of inactive/dormant supply"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: supply_active
     endpoint: cointime_statistics
@@ -299,7 +299,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Actively participating supply"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: supply_vaulted
     endpoint: cointime_statistics
@@ -307,7 +307,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Dormant/vaulted supply"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: true_market_mean_price
     endpoint: cointime_statistics
@@ -315,7 +315,7 @@ metrics:
     priority: medium
     tier: 2
     description: "Cost basis of actively traded supply"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: investor_cap
     endpoint: cointime_statistics
@@ -323,7 +323,7 @@ metrics:
     priority: medium
     tier: 2
     description: "Investor-driven component of realized cap"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: thermo_cap
     endpoint: cointime_statistics
@@ -331,7 +331,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Cumulative USD value of all mined BTC"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # JAMES CHECK "WEN TOP?" FRAMEWORK METRICS (High - professional validation)
@@ -346,7 +346,7 @@ metrics:
     priority: high
     tier: 2
     description: "Vaulted Realized Price - lower bound of Check's 'topping cloud' where HODLers ramp up profit taking"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: aviv
     endpoint: cointime_statistics
@@ -354,7 +354,7 @@ metrics:
     priority: high
     tier: 2
     description: "AVIV Ratio (Active Value to Investor Value) - Check's preferred MVRV variant for macro cycle analysis"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # DORMANCY & COIN DAYS (Medium - old coin movement)
@@ -366,7 +366,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Total coin days destroyed"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: asol
     endpoint: utxo_dormancy
@@ -374,7 +374,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Average Spent Output Lifespan"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: dormancy
     endpoint: utxo_dormancy
@@ -382,7 +382,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Average age of spent outputs"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # NETWORK METRICS (Medium - fundamentals)
@@ -402,7 +402,7 @@ metrics:
     priority: medium
     tier: 0
     description: "Mining difficulty"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: tx_count
     endpoint: network_statistics
@@ -410,7 +410,7 @@ metrics:
     priority: medium
     tier: 0
     description: "Transaction count"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: utxo_increase
     endpoint: network_statistics
@@ -418,7 +418,7 @@ metrics:
     priority: low
     tier: 0
     description: "Net change in UTXO set"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # FEE METRICS (Medium - demand indicators)
@@ -430,7 +430,7 @@ metrics:
     priority: medium
     tier: 0
     description: "Total transaction fees (BTC)"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: fee_total_usd
     endpoint: fees
@@ -438,7 +438,7 @@ metrics:
     priority: medium
     tier: 0
     description: "Total transaction fees (USD)"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: fee_avg
     endpoint: fees
@@ -446,7 +446,7 @@ metrics:
     priority: low
     tier: 0
     description: "Average transaction fee"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # VOLUME METRICS (Medium - activity measures)
@@ -458,7 +458,7 @@ metrics:
     priority: medium
     tier: 0
     description: "Transaction volume in BTC"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: volume_usd
     endpoint: volume
@@ -466,7 +466,7 @@ metrics:
     priority: medium
     tier: 0
     description: "Transaction volume in USD"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: volume_btc_adjusted
     endpoint: volume
@@ -474,7 +474,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Volume excluding dust"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # UNREALIZED P&L (Medium - market positioning)
@@ -486,7 +486,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Total unrealized profit"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: unrealized_loss
     endpoint: unrealizedloss
@@ -494,7 +494,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Total unrealized loss"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   - name: unrealized_cap
     endpoint: unrealizedcap
@@ -502,7 +502,7 @@ metrics:
     priority: medium
     tier: 1
     description: "Unrealized capitalization"
-    resolutions: [d1, h1]
+    resolutions: [d1, h1, h4, h8, h12]
 
   # ==========================================================================
   # REALIZED P&L (Medium - actual taking of profits/losses)

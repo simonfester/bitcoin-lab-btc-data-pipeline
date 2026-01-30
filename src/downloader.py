@@ -95,6 +95,9 @@ def handle_http_error(response: requests.Response, metric: str = "") -> None:
         message = response.text[:200] if response.text else response.reason
 
     if status == 400:
+        # API returns quota exhaustion as 400 — detect and raise as ForbiddenError
+        if "no quota" in message.lower() or "quota remaining" in message.lower():
+            raise ForbiddenError(f"{metric}: {message} (quota exhausted)", metric)
         raise InvalidParamsError(f"{metric}: {message}", metric)
     elif status == 401:
         raise AuthenticationError(f"Token invalid or missing: {message}", metric)
@@ -702,6 +705,11 @@ class SyncEngine:
                 # Rate limit: stop — we need to wait before any more requests
                 if metric_state.status == "rate_limited":
                     logger.warning("Rate limited — stopping sync. Retry later.")
+                    break
+
+                # Quota exhausted: stop — all subsequent requests will also fail
+                if metric_state.status == "forbidden" and "quota" in (error or "").lower():
+                    logger.warning("Quota exhausted — stopping sync. Wait for reset.")
                     break
 
                 consecutive_errors += 1

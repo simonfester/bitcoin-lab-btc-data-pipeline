@@ -366,10 +366,15 @@ def cmd_quota(base_url: str = None, token: str = None):
     print("=" * 60)
     
     print(f"\n📊 API Quota (from server):")
+    print(f"   Tier:      {api_status.get('tier', 'N/A')}")
     print(f"   Used:      {api_status['quota_used']:>12,} / {api_status['quota_limit']:,} DPs")
     print(f"   Remaining: {api_status['quota_remaining']:>12,} DPs ({100 - api_status['quota_pct_used']:.1f}%)")
     print(f"   Resets in: {api_status['days_until_reset']:.1f} days")
     print(f"   Next reset: {api_status['next_reset'][:10] if api_status['next_reset'] else 'N/A'}")
+    if api_status.get('subscription_expiry'):
+        print(f"   Subscription expires: {api_status['subscription_expiry'][:10]}")
+    if api_status.get('token_expiry'):
+        print(f"   Token expires: {api_status['token_expiry'][:10]}")
     
     # Progress bar
     pct = api_status['quota_pct_used']

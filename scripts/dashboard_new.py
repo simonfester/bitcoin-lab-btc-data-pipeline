@@ -169,11 +169,52 @@ def metric_row(label: str, value, color: str = "#fff") -> str:
 # CARD GENERATORS
 # =============================================================================
 
+def _load_price_chart_data() -> dict:
+    """Load price + cost basis time series for chart rendering.
+
+    Primary source: Bitcoin Lab hourly (resampled to daily).
+    Fallback: BRK daily (if BL unavailable for a metric).
+    """
+    bl_dir = PROJECT_ROOT / "data" / "bl" / "hourly"
+    brk_dir = PROJECT_ROOT / "data" / "brk" / "daily"
+    series_map = {
+        'price': ('price', '#f7931a'),
+        'realized_price': ('Realized Price', '#ef4444'),
+        'true_market_mean_price': ('True Mkt Mean', '#22c55e'),
+        'realized_price_sth': ('STH Realized', '#fbbf24'),
+        'vaulted_price': ('Vaulted Price', '#a855f7'),
+    }
+    result = {}
+    for filename, (label, color) in series_map.items():
+        # Try Bitcoin Lab first, fall back to BRK
+        bl_path = bl_dir / f"{filename}.parquet"
+        brk_path = brk_dir / f"{filename}.parquet"
+        path = bl_path if bl_path.exists() else brk_path
+        if not path.exists():
+            continue
+        df = pd.read_parquet(path)
+        # Last 2 years of data
+        cutoff = pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=730)
+        df = df[df['time'] >= cutoff].copy()
+        df = df.sort_values('time')
+        # Resample hourly data to daily (last value per day) for chart performance
+        if path == bl_path:
+            df = df.set_index('time').resample('1D').last().dropna().reset_index()
+        # Convert to lightweight-charts format: {time: 'YYYY-MM-DD', value: float}
+        records = []
+        for _, row in df.iterrows():
+            t = row['time']
+            v = row['value']
+            if pd.notna(v) and v > 0:
+                records.append({'time': t.strftime('%Y-%m-%d'), 'value': round(float(v), 2)})
+        result[filename] = {'label': label, 'color': color, 'data': records}
+    return result
+
+
 def generate_price_hero(ctx: dict, live_price: float = None) -> str:
-    """Generate full-width price hero section with price, changes, and levels."""
+    """Generate full-width price hero section with interactive time-series chart."""
     pc = ctx['price_context']
     price = live_price or pc.get('price')
-    levels = pc.get('levels', {})
     zone = pc.get('zone', 'UNKNOWN')
     zone_color = pc.get('zone_color', '#6b7280')
     change_24h = pc.get('change_24h')
@@ -186,49 +227,127 @@ def generate_price_hero(ctx: dict, live_price: float = None) -> str:
         arrow = '\u25B2' if val >= 0 else '\u25BC'
         return f'<div style="color:{color}; font-size:1.1em; font-weight:600;">{arrow} {val:+.1f}% <span style="color:#6b7280; font-weight:400; font-size:0.8em;">{label}</span></div>'
 
-    # Price level rows — horizontal bar with markers
-    level_order = [
-        ('realized_price', 'Realized', '#ef4444'),
-        ('true_market_mean', 'True Mkt Mean', '#22c55e'),
-        ('sth_realized_price', 'STH Realized', '#fbbf24'),
-        ('vaulted_price', 'Vaulted', '#a855f7'),
-    ]
-
-    level_items = ""
-    for key, label, color in level_order:
-        val = levels.get(key)
-        if val:
-            near = " ◄" if price and abs(price - val) / val < 0.05 else ""
-            level_items += f'''
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #1e293b;">
-                    <span style="color:{color}; font-weight:500;">{label}</span>
-                    <span style="color:#e2e8f0; font-weight:500;">{format_price(val)}{near}</span>
-                </div>'''
+    # Load time series data
+    chart_data = _load_price_chart_data()
+    chart_data_json = json.dumps(chart_data)
 
     return f'''
         <div class="card" style="margin-bottom:24px; padding:24px 32px;">
-            <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:32px; align-items:center;">
-                <!-- Left: Price + Changes -->
-                <div>
-                    <div style="font-size:3em; font-weight:bold; letter-spacing:-1px;">{format_price(price)}</div>
-                    <div style="display:flex; gap:16px; margin-top:8px;">
-                        {change_html(change_24h, '24h')}
-                        {change_html(change_7d, '7d')}
-                    </div>
-                    <div style="margin-top:12px;">
-                        {zone_badge(zone, zone_color)}
-                    </div>
+            <!-- Top row: Price, changes, zone -->
+            <div style="display:flex; align-items:baseline; gap:20px; flex-wrap:wrap; margin-bottom:16px;">
+                <div style="font-size:2.8em; font-weight:bold; letter-spacing:-1px;">{format_price(price)}</div>
+                <div style="display:flex; gap:14px; align-items:center;">
+                    {change_html(change_24h, '24h')}
+                    {change_html(change_7d, '7d')}
                 </div>
-                <!-- Center: Divider -->
-                <div style="width:1px; height:100%; background:#334155;"></div>
-                <!-- Right: Price Levels -->
-                <div>
-                    <div style="color:#9ca3af; font-size:0.8em; margin-bottom:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">On-Chain Price Levels</div>
-                    {level_items}
-                </div>
+                <div>{zone_badge(zone, zone_color)}</div>
+            </div>
+            <!-- Chart container -->
+            <div id="price-chart" style="width:100%; height:420px;"></div>
+            <!-- Legend -->
+            <div style="display:flex; gap:20px; margin-top:10px; flex-wrap:wrap;">
+                <span style="color:#f7931a; font-size:0.8em; font-weight:600;">\u2501\u2501 Price</span>
+                <span style="color:#ef4444; font-size:0.8em; font-weight:600;">\u2501\u2501 Realized</span>
+                <span style="color:#22c55e; font-size:0.8em; font-weight:600;">\u2501\u2501 True Mkt Mean</span>
+                <span style="color:#fbbf24; font-size:0.8em; font-weight:600;">\u2501\u2501 STH Realized</span>
+                <span style="color:#a855f7; font-size:0.8em; font-weight:600;">\u2501\u2501 Vaulted</span>
             </div>
         </div>
+        <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+        <script>
+        (function() {{
+            var chartData = {chart_data_json};
+            var container = document.getElementById('price-chart');
+            var chart = LightweightCharts.createChart(container, {{
+                layout: {{
+                    background: {{ type: 'solid', color: '#1e293b' }},
+                    textColor: '#94a3b8',
+                    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                }},
+                grid: {{
+                    vertLines: {{ color: 'rgba(51, 65, 85, 0.5)' }},
+                    horzLines: {{ color: 'rgba(51, 65, 85, 0.5)' }},
+                }},
+                rightPriceScale: {{
+                    borderColor: '#334155',
+                    scaleMargins: {{ top: 0.05, bottom: 0.05 }},
+                }},
+                timeScale: {{
+                    borderColor: '#334155',
+                    timeVisible: false,
+                }},
+                crosshair: {{
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: {{ color: 'rgba(148, 163, 184, 0.3)', labelBackgroundColor: '#475569' }},
+                    horzLine: {{ color: 'rgba(148, 163, 184, 0.3)', labelBackgroundColor: '#475569' }},
+                }},
+                handleScroll: true,
+                handleScale: true,
+            }});
+
+            var seriesOrder = ['price', 'realized_price', 'true_market_mean_price', 'realized_price_sth', 'vaulted_price'];
+            var lineWidths = {{ 'price': 2, 'realized_price': 1, 'true_market_mean_price': 1, 'realized_price_sth': 1, 'vaulted_price': 1 }};
+
+            seriesOrder.forEach(function(key) {{
+                if (!chartData[key]) return;
+                var s = chartData[key];
+                var series = chart.addLineSeries({{
+                    color: s.color,
+                    lineWidth: lineWidths[key] || 1,
+                    crosshairMarkerVisible: key === 'price',
+                    lastValueVisible: key === 'price',
+                    priceLineVisible: false,
+                    title: key === 'price' ? '' : s.label,
+                }});
+                series.setData(s.data);
+            }});
+
+            chart.timeScale().fitContent();
+
+            // Resize handler
+            var ro = new ResizeObserver(function(entries) {{
+                var cr = entries[0].contentRect;
+                chart.applyOptions({{ width: cr.width, height: cr.height }});
+            }});
+            ro.observe(container);
+        }})();
+        </script>
     '''
+
+
+def _gauge_bar(value: float, min_val: float, max_val: float, colors: list, labels: list, height: int = 8) -> str:
+    """Render a horizontal gauge bar with a needle marker. CSS-only, no JS."""
+    rng = max_val - min_val
+    pos = min(100, max(0, (value - min_val) / rng * 100)) if rng else 0
+    gradient = ', '.join(f'{c} {i * 100 // (len(colors) - 1)}%' for i, c in enumerate(colors))
+    label_html = ''.join(f'<span>{l}</span>' for l in labels)
+    return f'''
+        <div style="position:relative; height:{height}px; background:linear-gradient(to right, {gradient}); border-radius:{height // 2}px; margin:4px 0;">
+            <div style="position:absolute; left:{pos:.1f}%; top:50%; width:3px; height:{height + 8}px; background:#f1f5f9; border-radius:1.5px; transform:translate(-50%,-50%); box-shadow:0 0 6px rgba(241,245,249,0.4);"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.65em; color:#64748b; margin-top:2px; padding:0 2px;">
+            {label_html}
+        </div>'''
+
+
+def _stat_cell(value: str, label: str, color: str = '#f1f5f9', sub: str = '') -> str:
+    """Render a single stat inside a dark cell."""
+    sub_html = f'<div style="color:{color}; font-size:0.7em; font-weight:500; margin-top:2px;">{sub}</div>' if sub else ''
+    return f'''
+        <div style="text-align:center; padding:12px 8px; background:#0f172a; border-radius:8px; border:1px solid #1e293b;">
+            <div style="font-size:1.6em; font-weight:700; color:{color}; letter-spacing:-0.5px;">{value}</div>
+            <div style="color:#64748b; font-size:0.7em; font-weight:500; margin-top:4px; text-transform:uppercase; letter-spacing:0.5px;">{label}</div>
+            {sub_html}
+        </div>'''
+
+
+def _condition_row(icon: str, color: str, label: str, value_str: str) -> str:
+    """Render a single condition row for checklists."""
+    return f'''
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid rgba(51,65,85,0.5);">
+            <span style="color:{color}; font-weight:500; font-size:0.85em;">{icon} {label}</span>
+            <span style="color:#94a3b8; font-size:0.85em; font-family:'SF Mono',Menlo,monospace;">{value_str}</span>
+        </div>'''
 
 
 def generate_valuation_card(ctx: dict) -> str:
@@ -239,36 +358,25 @@ def generate_valuation_card(ctx: dict) -> str:
     aviv = val.get('aviv')
     zone = val.get('zone', 'UNKNOWN')
     zone_color = val.get('zone_color', '#6b7280')
-    
-    # MVRV-Z thermometer position (map -1 to 4 range to 0-100%)
-    thermo_pos = 0
-    if mvrv_z is not None:
-        thermo_pos = min(100, max(0, (mvrv_z + 1) / 5 * 100))
-    
+
+    gauge = _gauge_bar(
+        mvrv_z if mvrv_z is not None else 0, -1, 4,
+        ['#22c55e', '#3b82f6', '#f97316', '#ef4444'],
+        ['Deep Value', 'Fair', 'Expensive', 'Euphoria'],
+        height=8,
+    )
+
     return f'''
         <div class="card">
-            <h3>🌡️ Valuation</h3>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
-                <div>
-                    <div style="text-align:center; margin-bottom:16px;">
-                        <div style="font-size:2em; font-weight:bold;">{format_number(mvrv_z) if mvrv_z else 'N/A'}</div>
-                        <div style="color:#9ca3af;">MVRV-Z Score</div>
-                    </div>
-                    <div style="position:relative; height:20px; background:linear-gradient(to right, #22c55e 0%, #3b82f6 30%, #f97316 60%, #ef4444 100%); border-radius:10px;">
-                        <div style="position:absolute; left:{thermo_pos}%; top:-2px; width:4px; height:24px; background:white; border-radius:2px; transform:translateX(-50%);"></div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:0.75em; color:#9ca3af; margin-top:4px;">
-                        <span>Deep Value</span>
-                        <span>Fair</span>
-                        <span>Expensive</span>
-                        <span>Euphoria</span>
-                    </div>
-                </div>
-                <div>
-                    {metric_row('MVRV', format_number(mvrv))}
-                    {metric_row('AVIV', format_number(aviv))}
-                    {metric_row('Zone', zone_badge(zone, zone_color))}
-                </div>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">Valuation</h3>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:18px;">
+                {_stat_cell(format_number(mvrv_z) if mvrv_z else 'N/A', 'MVRV-Z', zone_color)}
+                {_stat_cell(format_number(mvrv) if mvrv else 'N/A', 'MVRV')}
+                {_stat_cell(format_number(aviv) if aviv else 'N/A', 'AVIV')}
+            </div>
+            {gauge}
+            <div style="text-align:center; margin-top:14px;">
+                {zone_badge(zone, zone_color)}
             </div>
         </div>
     '''
@@ -277,57 +385,43 @@ def generate_valuation_card(ctx: dict) -> str:
 def generate_sopr_card(ctx: dict) -> str:
     """Generate spending behavior card."""
     sopr = ctx['sopr']
-    
     sopr_val = sopr.get('sopr')
     sth_sopr = sopr.get('sopr_sth')
     lth_sopr = sopr.get('sopr_lth')
-    
     sopr_pos = sopr.get('sopr_position', 50)
     sth_state = sopr.get('sth_state', 'UNKNOWN')
     sth_color = sopr.get('sth_state_color', '#6b7280')
     lth_state = sopr.get('lth_state', 'UNKNOWN')
     lth_color = sopr.get('lth_state_color', '#6b7280')
-    
     pl_ratio = sopr.get('realized_pl_ratio')
-    
+
+    sopr_color = '#22c55e' if sopr_val and sopr_val < 1 else '#ef4444' if sopr_val else '#6b7280'
+    gauge = _gauge_bar(
+        sopr_val if sopr_val is not None else 1.0, 0.9, 1.1,
+        ['#22c55e', '#64748b', '#ef4444'],
+        ['Loss (0.9)', 'Break-even', 'Profit (1.1)'],
+        height=8,
+    )
+
+    pl_color = '#fbbf24' if pl_ratio and pl_ratio < 1 else '#22c55e'
+
     return f'''
         <div class="card">
-            <h3>💸 Spending Behavior</h3>
-            
-            <!-- SOPR Bar -->
-            <div style="margin-bottom:16px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">SOPR</span>
-                    <span style="font-weight:bold;">{format_number(sopr_val, 4)}</span>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">Spending Behavior</h3>
+            <div style="margin-bottom:18px;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+                    <span style="color:#64748b; font-size:0.75em; text-transform:uppercase; letter-spacing:0.5px;">SOPR</span>
+                    <span style="font-weight:700; font-size:1.1em; color:{sopr_color}; font-family:'SF Mono',Menlo,monospace;">{format_number(sopr_val, 4)}</span>
                 </div>
-                <div style="position:relative; height:12px; background:#1f2937; border-radius:6px;">
-                    <div style="position:absolute; left:50%; top:0; width:2px; height:100%; background:#6b7280;"></div>
-                    <div style="position:absolute; left:{sopr_pos}%; top:50%; width:12px; height:12px; background:{'#22c55e' if sopr_val and sopr_val < 1 else '#ef4444'}; border-radius:50%; transform:translate(-50%, -50%);"></div>
-                </div>
-                <div style="display:flex; justify-content:space-between; font-size:0.7em; color:#6b7280;">
-                    <span>Loss (0.9)</span>
-                    <span>Break-even (1.0)</span>
-                    <span>Profit (1.1)</span>
-                </div>
+                {gauge}
             </div>
-            
-            <!-- STH vs LTH -->
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;">
-                <div style="text-align:center; padding:8px; background:#1f2937; border-radius:8px;">
-                    <div style="font-size:1.5em; font-weight:bold;">{format_number(sth_sopr, 3)}</div>
-                    <div style="color:#9ca3af; font-size:0.8em;">STH-SOPR</div>
-                    <div style="color:{sth_color}; font-weight:500; margin-top:4px;">{sth_state}</div>
-                </div>
-                <div style="text-align:center; padding:8px; background:#1f2937; border-radius:8px;">
-                    <div style="font-size:1.5em; font-weight:bold;">{format_number(lth_sopr, 3)}</div>
-                    <div style="color:#9ca3af; font-size:0.8em;">LTH-SOPR</div>
-                    <div style="color:{lth_color}; font-weight:500; margin-top:4px;">{lth_state}</div>
-                </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                {_stat_cell(format_number(sth_sopr, 3), 'STH-SOPR', sth_color, sth_state)}
+                {_stat_cell(format_number(lth_sopr, 3), 'LTH-SOPR', lth_color, lth_state)}
             </div>
-            
-            <!-- Realized P/L Ratio -->
-            <div style="margin-top:16px;">
-                {metric_row('Realized P/L Ratio', format_number(pl_ratio, 2), '#fbbf24' if pl_ratio and pl_ratio < 1 else '#22c55e')}
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#0f172a; border-radius:8px; border:1px solid #1e293b;">
+                <span style="color:#64748b; font-size:0.75em; text-transform:uppercase; letter-spacing:0.5px;">Realized P/L Ratio</span>
+                <span style="color:{pl_color}; font-weight:700; font-family:'SF Mono',Menlo,monospace;">{format_number(pl_ratio, 2)}</span>
             </div>
         </div>
     '''
@@ -337,54 +431,38 @@ def generate_profitability_card(ctx: dict) -> str:
     """Generate profitability card with NUPL."""
     prof = ctx['profitability']
     supply = ctx['supply']
-    
     nupl = prof.get('nupl')
     nupl_zone = prof.get('nupl_zone', 'UNKNOWN')
     nupl_color = prof.get('nupl_color', '#6b7280')
-    
     profit_pct = supply.get('profit_percent', 0)
     loss_pct = supply.get('loss_percent', 0)
-    
-    # NUPL position (map -0.5 to 1.0 range to 0-100%)
-    nupl_pos = 0
-    if nupl is not None:
-        nupl_pos = min(100, max(0, (nupl + 0.5) / 1.5 * 100))
-    
+
+    gauge = _gauge_bar(
+        nupl if nupl is not None else 0, -0.5, 1.0,
+        ['#ef4444', '#f97316', '#22c55e', '#3b82f6', '#a855f7'],
+        ['Capitulation', 'Hope', 'Optimism', 'Belief', 'Euphoria'],
+        height=8,
+    )
+
     return f'''
         <div class="card">
-            <h3>💰 Profitability</h3>
-            
-            <!-- NUPL Bar -->
-            <div style="margin-bottom:16px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">NUPL</span>
-                    <span style="font-weight:bold;">{format_number(nupl, 3)}</span>
-                </div>
-                <div style="position:relative; height:16px; background:linear-gradient(to right, #ef4444 0%, #f97316 25%, #22c55e 50%, #3b82f6 75%, #a855f7 100%); border-radius:8px;">
-                    <div style="position:absolute; left:{nupl_pos}%; top:50%; width:4px; height:20px; background:white; border-radius:2px; transform:translate(-50%, -50%);"></div>
-                </div>
-                <div style="display:flex; justify-content:space-between; font-size:0.65em; color:#6b7280; margin-top:2px;">
-                    <span>Capitulation</span>
-                    <span>Hope</span>
-                    <span>Optimism</span>
-                    <span>Belief</span>
-                    <span>Euphoria</span>
-                </div>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">Profitability</h3>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px;">
+                {_stat_cell(format_number(nupl, 3) if nupl is not None else 'N/A', 'NUPL', nupl_color)}
+                {_stat_cell(zone_badge(nupl_zone, nupl_color), 'Emotion')}
             </div>
-            
-            <div style="text-align:center; margin:12px 0;">
-                {zone_badge(nupl_zone, nupl_color)}
+            <div style="margin-bottom:18px;">
+                {gauge}
             </div>
-            
-            <!-- Supply in Profit/Loss -->
-            <div style="margin-top:16px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#22c55e;">Profit {format_percent(profit_pct)}</span>
-                    <span style="color:#ef4444;">Loss {format_percent(loss_pct)}</span>
+            <div style="padding:12px; background:#0f172a; border-radius:8px; border:1px solid #1e293b;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                    <span style="color:#22c55e; font-size:0.8em; font-weight:600;">Profit {format_percent(profit_pct)}</span>
+                    <span style="color:#ef4444; font-size:0.8em; font-weight:600;">Loss {format_percent(loss_pct)}</span>
                 </div>
-                <div style="height:12px; background:#ef4444; border-radius:6px; overflow:hidden;">
-                    <div style="height:100%; width:{profit_pct}%; background:#22c55e;"></div>
+                <div style="height:8px; background:#ef4444; border-radius:4px; overflow:hidden;">
+                    <div style="height:100%; width:{profit_pct}%; background:#22c55e; border-radius:4px;"></div>
                 </div>
+                <div style="color:#64748b; font-size:0.65em; text-align:center; margin-top:4px;">Supply in Profit vs Loss</div>
             </div>
         </div>
     '''
@@ -393,34 +471,34 @@ def generate_profitability_card(ctx: dict) -> str:
 def generate_supply_card(ctx: dict) -> str:
     """Generate supply dynamics card."""
     supply = ctx['supply']
-    
     lth_pct = supply.get('lth_percent', 0)
     sth_pct = supply.get('sth_percent', 0)
     state = supply.get('supply_state', 'UNKNOWN')
     state_color = supply.get('supply_state_color', '#6b7280')
-    
+
     return f'''
         <div class="card">
-            <h3>📦 Supply Dynamics</h3>
-            
-            <!-- LTH vs STH Bar -->
-            <div style="margin-bottom:16px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#22c55e;">LTH {format_percent(lth_pct)}</span>
-                    <span style="color:#f97316;">STH {format_percent(sth_pct)}</span>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">Supply Distribution</h3>
+            <div style="padding:12px; background:#0f172a; border-radius:8px; border:1px solid #1e293b; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                    <span style="color:#22c55e; font-size:0.8em; font-weight:600;">LTH {format_percent(lth_pct)}</span>
+                    <span style="color:#f97316; font-size:0.8em; font-weight:600;">STH {format_percent(sth_pct)}</span>
                 </div>
-                <div style="height:16px; background:#f97316; border-radius:8px; overflow:hidden;">
-                    <div style="height:100%; width:{lth_pct}%; background:#22c55e;"></div>
+                <div style="height:8px; background:#f97316; border-radius:4px; overflow:hidden;">
+                    <div style="height:100%; width:{lth_pct}%; background:#22c55e; border-radius:4px;"></div>
                 </div>
             </div>
-            
-            <div style="text-align:center; margin-top:16px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                {_stat_cell(format_btc_supply(supply.get('supply_lth')), 'LTH Supply', '#22c55e')}
+                {_stat_cell(format_btc_supply(supply.get('supply_sth')), 'STH Supply', '#f97316')}
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#0f172a; border-radius:8px; border:1px solid #1e293b; margin-bottom:14px;">
+                <span style="color:#64748b; font-size:0.75em; text-transform:uppercase; letter-spacing:0.5px;">LTH / STH Ratio</span>
+                <span style="color:#f1f5f9; font-weight:700; font-family:'SF Mono',Menlo,monospace;">{format_number(supply.get('lth_sth_ratio'), 2)}</span>
+            </div>
+            <div style="text-align:center;">
                 {zone_badge(state, state_color)}
             </div>
-            
-            {metric_row('LTH Supply', format_btc_supply(supply.get('supply_lth')))}
-            {metric_row('STH Supply', format_btc_supply(supply.get('supply_sth')))}
-            {metric_row('LTH/STH Ratio', format_number(supply.get('lth_sth_ratio'), 2))}
         </div>
     '''
 
@@ -428,36 +506,32 @@ def generate_supply_card(ctx: dict) -> str:
 def generate_liveliness_card(ctx: dict) -> str:
     """Generate liveliness/activity card."""
     live = ctx['liveliness']
-    
     liveliness = live.get('liveliness')
     vaultedness = live.get('vaultedness')
     state = live.get('activity_state', 'UNKNOWN')
     state_color = live.get('activity_color', '#6b7280')
-    
     live_pct = (liveliness * 100) if liveliness else 0
     vault_pct = (vaultedness * 100) if vaultedness else 0
-    
+
     return f'''
         <div class="card">
-            <h3>⚡ Liveliness</h3>
-            
-            <div style="margin-bottom:16px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#3b82f6;">Liveliness {format_percent(live_pct)}</span>
-                    <span style="color:#22c55e;">Vaultedness {format_percent(vault_pct)}</span>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">Activity</h3>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px;">
+                {_stat_cell(format_percent(live_pct), 'Liveliness', '#3b82f6')}
+                {_stat_cell(format_percent(vault_pct), 'Vaultedness', '#22c55e')}
+            </div>
+            <div style="padding:12px; background:#0f172a; border-radius:8px; border:1px solid #1e293b; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                    <span style="color:#3b82f6; font-size:0.8em; font-weight:600;">Spending</span>
+                    <span style="color:#22c55e; font-size:0.8em; font-weight:600;">HODLing</span>
                 </div>
-                <div style="height:16px; background:#22c55e; border-radius:8px; overflow:hidden;">
-                    <div style="height:100%; width:{live_pct}%; background:#3b82f6;"></div>
+                <div style="height:8px; background:#22c55e; border-radius:4px; overflow:hidden;">
+                    <div style="height:100%; width:{live_pct}%; background:#3b82f6; border-radius:4px;"></div>
                 </div>
             </div>
-            
-            <div style="text-align:center; margin-top:16px;">
+            <div style="text-align:center;">
                 {zone_badge(state, state_color)}
             </div>
-            
-            <p style="color:#9ca3af; font-size:0.8em; margin-top:12px;">
-                High liveliness = active spending. High vaultedness = HODLing behavior.
-            </p>
         </div>
     '''
 
@@ -465,35 +539,25 @@ def generate_liveliness_card(ctx: dict) -> str:
 def generate_miner_card(ctx: dict) -> str:
     """Generate miner health card."""
     miner = ctx['miner']
-    
     puell = miner.get('puell_multiple')
     puell_zone = miner.get('puell_zone', 'UNKNOWN')
     puell_color = miner.get('puell_color', '#6b7280')
-    
-    # Puell position (map 0-8 range to 0-100%)
-    puell_pos = 0
-    if puell is not None:
-        puell_pos = min(100, max(0, puell / 8 * 100))
-    
+
+    gauge = _gauge_bar(
+        puell if puell is not None else 0, 0, 8,
+        ['#22c55e', '#64748b', '#f97316', '#ef4444'],
+        ['Capitulation', 'Normal', 'Profit-taking', 'Overheated'],
+        height=8,
+    )
+
     return f'''
         <div class="card">
-            <h3>⛏️ Miner Health</h3>
-            
-            <div style="text-align:center; margin-bottom:16px;">
-                <div style="font-size:2em; font-weight:bold;">{format_number(puell, 2)}</div>
-                <div style="color:#9ca3af;">Puell Multiple</div>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">Miner Health</h3>
+            <div style="margin-bottom:18px;">
+                {_stat_cell(format_number(puell, 2) if puell else 'N/A', 'Puell Multiple', puell_color)}
             </div>
-            
-            <div style="position:relative; height:16px; background:linear-gradient(to right, #22c55e 0%, #6b7280 30%, #f97316 70%, #ef4444 100%); border-radius:8px;">
-                <div style="position:absolute; left:{puell_pos}%; top:50%; width:4px; height:20px; background:white; border-radius:2px; transform:translate(-50%, -50%);"></div>
-            </div>
-            <div style="display:flex; justify-content:space-between; font-size:0.7em; color:#6b7280; margin-top:4px;">
-                <span>Capitulation</span>
-                <span>Normal</span>
-                <span>Profit-taking</span>
-            </div>
-            
-            <div style="text-align:center; margin-top:16px;">
+            {gauge}
+            <div style="text-align:center; margin-top:14px;">
                 {zone_badge(puell_zone, puell_color)}
             </div>
         </div>
@@ -503,38 +567,29 @@ def generate_miner_card(ctx: dict) -> str:
 def generate_checkmate_card(ctx: dict) -> str:
     """Generate Checkmate composite signal card."""
     cm = ctx['checkmate']
-    
     score = cm.get('score', 0)
     total = cm.get('total', 0)
     signal = cm.get('signal', 'NO SIGNAL')
     signal_color = cm.get('signal_color', '#6b7280')
     conditions = cm.get('conditions', [])
-    
+
     condition_rows = ""
     for cond in conditions:
-        icon = "✓" if cond.get('met') else "○"
-        color = "#22c55e" if cond.get('met') else "#6b7280"
+        met = cond.get('met')
+        icon = "&#10003;" if met else "&#9675;"
+        color = "#22c55e" if met else "#475569"
         val = cond.get('value')
         val_str = format_number(val, 4) if val is not None else "N/A"
-        condition_rows += f'''
-            <div style="display:flex; justify-content:space-between; padding:4px 0;">
-                <span style="color:{color};">{icon} {cond.get('name', '')}</span>
-                <span style="color:#9ca3af;">{val_str}</span>
-            </div>
-        '''
-    
+        condition_rows += _condition_row(icon, color, cond.get('name', ''), val_str)
+
     return f'''
         <div class="card">
-            <h3>🎯 Checkmate Signal</h3>
-            
-            <div style="text-align:center; margin:16px 0;">
-                <div style="font-size:2.5em; font-weight:bold;">{score}/{total}</div>
-                <div style="margin-top:8px;">
-                    {zone_badge(signal, signal_color)}
-                </div>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">Checkmate Signal</h3>
+            <div style="text-align:center; margin-bottom:16px;">
+                <div style="font-size:2.8em; font-weight:800; color:{signal_color}; letter-spacing:-1px;">{score}<span style="font-size:0.45em; color:#64748b; font-weight:500;">/{total}</span></div>
+                <div style="margin-top:6px;">{zone_badge(signal, signal_color)}</div>
             </div>
-            
-            <div style="margin-top:16px;">
+            <div style="background:#0f172a; border-radius:8px; border:1px solid #1e293b; overflow:hidden;">
                 {condition_rows}
             </div>
         </div>
@@ -544,45 +599,32 @@ def generate_checkmate_card(ctx: dict) -> str:
 def generate_btd_card(ctx: dict) -> str:
     """Generate Buy The Dip checklist card."""
     btd = ctx['buy_the_dip']
-    
     met_count = btd.get('met_count', 0)
     total = btd.get('total', 0)
     signal = btd.get('signal', 'NO DIP')
     signal_color = btd.get('signal_color', '#6b7280')
     conditions = btd.get('conditions', [])
-    
+
     condition_rows = ""
     for cond in conditions:
         triggered = cond.get('triggered', False)
-        icon = "✓" if triggered else "○"
-        color = "#22c55e" if triggered else "#6b7280"
+        icon = "&#10003;" if triggered else "&#9675;"
+        color = "#22c55e" if triggered else "#475569"
         val = cond.get('value')
         val_str = format_number(val, 4) if val is not None else "N/A"
-        condition_rows += f'''
-            <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #374151;">
-                <span style="color:{color}; font-weight:500;">{icon} {cond.get('label', '')}</span>
-                <span style="color:#9ca3af;">{val_str}</span>
-            </div>
-        '''
-    
+        condition_rows += _condition_row(icon, color, cond.get('label', ''), val_str)
+
     return f'''
         <div class="card">
-            <h3>🛒 Buy The Dip</h3>
-            
-            <div style="text-align:center; margin:16px 0;">
-                <div style="font-size:3em; font-weight:bold; color:{signal_color};">{met_count}/{total}</div>
-                <div style="margin-top:8px;">
-                    {zone_badge(signal, signal_color)}
-                </div>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">Buy The Dip</h3>
+            <div style="text-align:center; margin-bottom:16px;">
+                <div style="font-size:3em; font-weight:800; color:{signal_color}; letter-spacing:-1px;">{met_count}<span style="font-size:0.4em; color:#64748b; font-weight:500;">/{total}</span></div>
+                <div style="margin-top:6px;">{zone_badge(signal, signal_color)}</div>
             </div>
-            
-            <div style="margin-top:16px;">
+            <div style="background:#0f172a; border-radius:8px; border:1px solid #1e293b; overflow:hidden;">
                 {condition_rows}
             </div>
-            
-            <p style="color:#6b7280; font-size:0.75em; margin-top:12px; text-align:center;">
-                James Check: 4+ conditions = strong buy signal
-            </p>
+            <div style="color:#475569; font-size:0.7em; margin-top:10px; text-align:center;">4+ conditions = strong buy signal</div>
         </div>
     '''
 
@@ -590,7 +632,6 @@ def generate_btd_card(ctx: dict) -> str:
 def generate_8_metric_exit_card(ctx: dict) -> str:
     """Generate 8-Metric Cycle Extreme Detector card."""
     exit_8 = ctx.get('exit_8_metric', {})
-
     met_count = exit_8.get('met_count', 0)
     total = exit_8.get('total', 0)
     signal = exit_8.get('signal', 'UNKNOWN')
@@ -598,21 +639,6 @@ def generate_8_metric_exit_card(ctx: dict) -> str:
     recommendation = exit_8.get('recommendation', '')
     conditions = exit_8.get('conditions', [])
 
-    condition_rows = ""
-    for cond in conditions:
-        triggered = cond.get('triggered', False)
-        icon = "✓" if triggered else "○"
-        color = "#ef4444" if triggered else "#6b7280"
-        z_score = cond.get('z_score')
-        z_str = f"{z_score:+.2f}σ" if z_score is not None else "N/A"
-        condition_rows += f'''
-            <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:0.85em;">
-                <span style="color:{color};">{icon} {cond.get('label', '')[:20]}</span>
-                <span style="color:#9ca3af;">{z_str}</span>
-            </div>
-        '''
-
-    # Color intensity based on signal
     if met_count >= 6:
         title_color = "#ef4444"
     elif met_count >= 4:
@@ -622,29 +648,30 @@ def generate_8_metric_exit_card(ctx: dict) -> str:
     else:
         title_color = "#22c55e"
 
+    condition_rows = ""
+    for cond in conditions:
+        triggered = cond.get('triggered', False)
+        icon = "&#10003;" if triggered else "&#9675;"
+        color = "#ef4444" if triggered else "#475569"
+        z_score = cond.get('z_score')
+        z_str = f"{z_score:+.2f}\u03c3" if z_score is not None else "N/A"
+        condition_rows += _condition_row(icon, color, cond.get('label', '')[:22], z_str)
+
     return f'''
         <div class="card">
-            <h3>🚨 8-Metric Exit Detector</h3>
-
-            <div style="text-align:center; margin:16px 0;">
-                <div style="font-size:3em; font-weight:bold; color:{title_color};">{met_count}/{total}</div>
-                <div style="margin-top:8px;">
-                    {zone_badge(signal, signal_color)}
-                </div>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">8-Metric Exit Detector</h3>
+            <div style="text-align:center; margin-bottom:16px;">
+                <div style="font-size:3em; font-weight:800; color:{title_color}; letter-spacing:-1px;">{met_count}<span style="font-size:0.4em; color:#64748b; font-weight:500;">/{total}</span></div>
+                <div style="margin-top:6px;">{zone_badge(signal, signal_color)}</div>
             </div>
-
-            <div style="background:#1e293b; padding:8px; border-radius:6px; margin:12px 0; text-align:center;">
-                <div style="color:#9ca3af; font-size:0.75em;">Recommendation</div>
-                <div style="color:#f1f5f9; font-weight:500;">{recommendation}</div>
+            <div style="padding:10px 12px; background:#0f172a; border-radius:8px; border:1px solid #1e293b; margin-bottom:12px; text-align:center;">
+                <div style="color:#475569; font-size:0.65em; text-transform:uppercase; letter-spacing:0.5px;">Recommendation</div>
+                <div style="color:#f1f5f9; font-weight:600; font-size:0.9em; margin-top:2px;">{recommendation}</div>
             </div>
-
-            <div style="margin-top:12px; max-height:240px; overflow-y:auto;">
+            <div style="background:#0f172a; border-radius:8px; border:1px solid #1e293b; overflow:hidden; max-height:240px; overflow-y:auto;">
                 {condition_rows}
             </div>
-
-            <p style="color:#6b7280; font-size:0.7em; margin-top:12px; text-align:center;">
-                4/8 = Caution | 6/8 = High Risk (James Check Masterclass #19)
-            </p>
+            <div style="color:#475569; font-size:0.65em; margin-top:10px; text-align:center;">4/8 = Caution &middot; 6/8 = High Risk</div>
         </div>
     '''
 
@@ -652,7 +679,6 @@ def generate_8_metric_exit_card(ctx: dict) -> str:
 def generate_sth_zones_card(ctx: dict) -> str:
     """Generate STH-MVRV Zones card for local tops."""
     sth_zones = ctx.get('sth_mvrv_zones', {})
-
     zone = sth_zones.get('zone', 'UNKNOWN')
     zone_color = sth_zones.get('zone_color', '#6b7280')
     current_value = sth_zones.get('current_value')
@@ -661,52 +687,37 @@ def generate_sth_zones_card(ctx: dict) -> str:
     price_levels = sth_zones.get('price_levels', {})
     current_price = sth_zones.get('current_price')
 
-    # Generate price level rows
+    z_str = f"{z_score:+.2f}\u03c3" if z_score is not None else "N/A"
+
     price_rows = ""
     if price_levels:
-        for level, price in price_levels.items():
+        level_colors = {'warming': '#fbbf24', 'local_top': '#f97316', 'overheated': '#ef4444'}
+        for level, lprice in price_levels.items():
             level_name = level.replace('_', ' ').title()
-            if level == 'warming':
-                level_color = "#fbbf24"
-            elif level == 'local_top':
-                level_color = "#f97316"
-            else:  # overheated
-                level_color = "#ef4444"
-
+            lc = level_colors.get(level, '#64748b')
             price_rows += f'''
-                <div style="display:flex; justify-content:space-between; padding:6px; background:#1e293b; border-radius:4px; margin:4px 0;">
-                    <span style="color:{level_color};">{level_name}</span>
-                    <span style="color:#f1f5f9; font-weight:500;">{format_price(price)}</span>
-                </div>
-            '''
-
-    z_str = f"{z_score:+.2f}σ" if z_score is not None else "N/A"
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid rgba(51,65,85,0.5);">
+                    <span style="color:{lc}; font-size:0.85em; font-weight:500;">{level_name}</span>
+                    <span style="color:#f1f5f9; font-weight:600; font-family:'SF Mono',Menlo,monospace; font-size:0.85em;">{format_price(lprice)}</span>
+                </div>'''
 
     return f'''
         <div class="card">
-            <h3>📊 STH-MVRV Zones</h3>
-
-            <div style="text-align:center; margin:16px 0;">
-                <div style="font-size:2em; font-weight:bold;">{format_number(current_value, 4)}</div>
-                <div style="color:#9ca3af;">STH-MVRV (Z: {z_str})</div>
-                <div style="margin-top:8px;">
-                    {zone_badge(zone, zone_color)}
-                </div>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">STH-MVRV Zones</h3>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                {_stat_cell(format_number(current_value, 4) if current_value else 'N/A', 'STH-MVRV', zone_color)}
+                {_stat_cell(z_str, 'Z-Score')}
             </div>
-
-            <div style="background:#1e293b; padding:10px; border-radius:6px; margin:12px 0;">
-                <div style="color:#9ca3af; font-size:0.8em; margin-bottom:4px;">Current Price</div>
-                <div style="color:#f1f5f9; font-size:1.5em; font-weight:bold;">{format_price(current_price)}</div>
+            <div style="text-align:center; margin-bottom:14px;">{zone_badge(zone, zone_color)}</div>
+            <div style="padding:10px 12px; background:#0f172a; border-radius:8px; border:1px solid #1e293b; margin-bottom:12px; text-align:center;">
+                <div style="color:#475569; font-size:0.65em; text-transform:uppercase; letter-spacing:0.5px;">Current Price</div>
+                <div style="color:#f1f5f9; font-weight:700; font-size:1.4em; letter-spacing:-0.5px; margin-top:2px;">{format_price(current_price)}</div>
             </div>
-
-            <div style="margin-top:12px;">
-                <div style="color:#9ca3af; font-size:0.85em; margin-bottom:8px;">Local Top Price Levels</div>
+            <div style="background:#0f172a; border-radius:8px; border:1px solid #1e293b; overflow:hidden; margin-bottom:12px;">
+                <div style="color:#475569; font-size:0.65em; text-transform:uppercase; letter-spacing:0.5px; padding:8px 10px; border-bottom:1px solid rgba(51,65,85,0.5);">Local Top Price Levels</div>
                 {price_rows}
             </div>
-
-            <p style="color:#6b7280; font-size:0.75em; margin-top:12px; line-height:1.4;">
-                {interpretation}
-            </p>
+            <div style="color:#64748b; font-size:0.75em; line-height:1.5;">{interpretation}</div>
         </div>
     '''
 
@@ -714,70 +725,52 @@ def generate_sth_zones_card(ctx: dict) -> str:
 def generate_lth_distribution_card(ctx: dict) -> str:
     """Generate LTH Distribution Signal card."""
     lth_dist = ctx.get('lth_distribution', {})
-
     signal = lth_dist.get('signal', 'UNKNOWN')
     signal_color = lth_dist.get('signal_color', '#6b7280')
     interpretation = lth_dist.get('interpretation', '')
-
     mvrv = lth_dist.get('mvrv')
     mvrv_threshold = lth_dist.get('mvrv_threshold', 2.0)
     mvrv_triggered = lth_dist.get('mvrv_triggered', False)
-
     lth_sopr = lth_dist.get('lth_sopr')
     lth_sopr_threshold = lth_dist.get('lth_sopr_threshold', 1.5)
     lth_sopr_triggered = lth_dist.get('lth_sopr_triggered', False)
-
     both_triggered = lth_dist.get('both_triggered', False)
 
-    # Icons and colors
-    mvrv_icon = "✓" if mvrv_triggered else "○"
-    mvrv_color = "#ef4444" if mvrv_triggered else "#6b7280"
+    mvrv_color = "#ef4444" if mvrv_triggered else "#475569"
+    sopr_color = "#ef4444" if lth_sopr_triggered else "#475569"
+    mvrv_icon = "&#10003;" if mvrv_triggered else "&#9675;"
+    sopr_icon = "&#10003;" if lth_sopr_triggered else "&#9675;"
 
-    sopr_icon = "✓" if lth_sopr_triggered else "○"
-    sopr_color = "#ef4444" if lth_sopr_triggered else "#6b7280"
+    alert_bg = '#450a0a' if both_triggered else '#0f172a'
+    alert_border = '#7f1d1d' if both_triggered else '#1e293b'
 
     return f'''
         <div class="card">
-            <h3>💎 LTH Distribution</h3>
-
-            <div style="text-align:center; margin:16px 0;">
-                <div style="margin-top:8px;">
-                    {zone_badge(signal, signal_color)}
-                </div>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">LTH Distribution</h3>
+            <div style="text-align:center; margin-bottom:16px;">
+                {zone_badge(signal, signal_color)}
             </div>
-
-            <div style="margin-top:16px;">
-                <div style="display:flex; justify-content:space-between; padding:12px; background:#1e293b; border-radius:6px; margin:8px 0;">
+            <div style="background:#0f172a; border-radius:8px; border:1px solid #1e293b; overflow:hidden; margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(51,65,85,0.5);">
                     <div>
-                        <span style="color:{mvrv_color}; font-weight:bold;">{mvrv_icon} MVRV</span>
-                        <div style="color:#6b7280; font-size:0.75em;">Threshold: {mvrv_threshold}</div>
+                        <span style="color:{mvrv_color}; font-weight:600; font-size:0.85em;">{mvrv_icon} MVRV</span>
+                        <div style="color:#475569; font-size:0.65em; margin-top:2px;">Threshold: {mvrv_threshold}</div>
                     </div>
-                    <div style="text-align:right;">
-                        <div style="font-size:1.5em; font-weight:bold; color:{mvrv_color};">{format_number(mvrv, 2)}</div>
-                    </div>
+                    <div style="font-size:1.4em; font-weight:700; color:{mvrv_color}; font-family:'SF Mono',Menlo,monospace;">{format_number(mvrv, 2)}</div>
                 </div>
-
-                <div style="display:flex; justify-content:space-between; padding:12px; background:#1e293b; border-radius:6px; margin:8px 0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px;">
                     <div>
-                        <span style="color:{sopr_color}; font-weight:bold;">{sopr_icon} LTH-SOPR</span>
-                        <div style="color:#6b7280; font-size:0.75em;">Threshold: {lth_sopr_threshold}</div>
+                        <span style="color:{sopr_color}; font-weight:600; font-size:0.85em;">{sopr_icon} LTH-SOPR</span>
+                        <div style="color:#475569; font-size:0.65em; margin-top:2px;">Threshold: {lth_sopr_threshold}</div>
                     </div>
-                    <div style="text-align:right;">
-                        <div style="font-size:1.5em; font-weight:bold; color:{sopr_color};">{format_number(lth_sopr, 2)}</div>
-                    </div>
+                    <div style="font-size:1.4em; font-weight:700; color:{sopr_color}; font-family:'SF Mono',Menlo,monospace;">{format_number(lth_sopr, 2)}</div>
                 </div>
             </div>
-
-            <div style="background:{'#7f1d1d' if both_triggered else '#1e293b'}; padding:10px; border-radius:6px; margin:12px 0; text-align:center;">
-                <div style="color:#9ca3af; font-size:0.75em;">Interpretation</div>
-                <div style="color:#f1f5f9; font-weight:500; font-size:0.9em; line-height:1.4; margin-top:4px;">
-                    {interpretation}
-                </div>
+            <div style="background:{alert_bg}; padding:12px; border-radius:8px; border:1px solid {alert_border}; text-align:center;">
+                <div style="color:#475569; font-size:0.65em; text-transform:uppercase; letter-spacing:0.5px;">Interpretation</div>
+                <div style="color:#e2e8f0; font-weight:500; font-size:0.85em; line-height:1.5; margin-top:4px;">{interpretation}</div>
             </div>
-
-            <p style="color:#6b7280; font-size:0.7em; margin-top:12px; text-align:center;">
-                Both conditions = HODLers distributing (James Check)
-            </p>
+            <div style="color:#475569; font-size:0.65em; margin-top:10px; text-align:center;">Both conditions = HODLers distributing</div>
         </div>
     '''
 
@@ -786,32 +779,33 @@ def generate_signals_card(signals: list, title: str, icon: str) -> str:
     """Generate entry or exit signals card."""
     triggered_count = sum(1 for s in signals if s.get('triggered'))
     total = len(signals)
-    
+    sig_color = '#22c55e' if triggered_count > 0 else '#475569'
+
     signal_rows = ""
     for sig in signals:
         triggered = sig.get('triggered', False)
-        badge_icon = "✓" if triggered else "○"
-        color = "#22c55e" if triggered else "#6b7280"
+        badge_icon = "&#10003;" if triggered else "&#9675;"
+        color = "#22c55e" if triggered else "#475569"
         val = sig.get('value')
         val_str = format_number(val, 4) if val is not None else "N/A"
+        desc = sig.get('description', '')
+        desc_html = f'<div style="color:#475569; font-size:0.7em; margin-top:1px;">{desc}</div>' if desc else ''
         signal_rows += f'''
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #374151;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid rgba(51,65,85,0.5);">
                 <div>
-                    <span style="color:{color}; font-weight:bold;">{badge_icon} {sig.get('label', '')}</span>
-                    <div style="color:#6b7280; font-size:0.75em;">{sig.get('description', '')}</div>
+                    <span style="color:{color}; font-weight:500; font-size:0.85em;">{badge_icon} {sig.get('label', '')}</span>
+                    {desc_html}
                 </div>
-                <span style="color:#9ca3af;">{val_str}</span>
-            </div>
-        '''
-    
+                <span style="color:#94a3b8; font-size:0.85em; font-family:'SF Mono',Menlo,monospace;">{val_str}</span>
+            </div>'''
+
     return f'''
         <div class="card">
-            <h3>{icon} {title}</h3>
-            <div style="text-align:center; margin:12px 0;">
-                <span style="font-size:1.5em; font-weight:bold;">{triggered_count}/{total}</span>
-                <span style="color:#9ca3af;"> triggered</span>
+            <h3 style="color:#94a3b8; font-size:0.8em; font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; border-bottom:1px solid #334155; padding-bottom:10px;">{title}</h3>
+            <div style="text-align:center; margin-bottom:16px;">
+                <div style="font-size:2em; font-weight:800; color:{sig_color}; letter-spacing:-1px;">{triggered_count}<span style="font-size:0.45em; color:#64748b; font-weight:500;">/{total} triggered</span></div>
             </div>
-            <div style="margin-top:12px;">
+            <div style="background:#0f172a; border-radius:8px; border:1px solid #1e293b; overflow:hidden;">
                 {signal_rows}
             </div>
         </div>
@@ -913,9 +907,6 @@ def generate_pillar_content(ctx: dict, live_price: float = None, hourly_metrics:
         return not needed.intersection(set(hourly_metrics))
 
     return f'''
-        <!-- Price Hero -->
-        {generate_price_hero(ctx, live_price)}
-
         <div class="pillar-grid">
             <!-- ROW 1: Valuation + Profitability -->
             <div class="pillar-section">
@@ -1040,6 +1031,9 @@ def generate_dashboard_html(ctx: dict, live_price: float = None, hourly_ctx: dic
             {' | Live price enabled' if live_price else ''}{stale_badge}
         </div>
         '''
+
+    # Generate price hero once (shared across daily/hourly)
+    price_hero = generate_price_hero(ctx, live_price)
 
     # Generate both content blocks
     daily_content = generate_pillar_content(ctx, live_price)
@@ -1227,9 +1221,10 @@ def generate_dashboard_html(ctx: dict, live_price: float = None, hourly_ctx: dic
         }}
         .card {{
             background: #1e293b;
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 10px;
+            padding: 22px;
             border: 1px solid #334155;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }}
         .card h3 {{
             margin-bottom: 16px;
@@ -1274,6 +1269,7 @@ def generate_dashboard_html(ctx: dict, live_price: float = None, hourly_ctx: dic
     </div>
 
     <div class="container">
+        {price_hero}
         <div id="content-daily">
             {daily_content}
         </div>
