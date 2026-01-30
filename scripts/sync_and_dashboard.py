@@ -15,8 +15,8 @@ Usage:
     python scripts/sync_and_dashboard.py --skip-glassnode   # Skip Glassnode sync
 
 Pipeline:
-    1. Sync BRK data (FREE, primary source)
-    2. Sync Bitcoin Lab data (daily + hourly for exit signals)
+    1. Sync Bitcoin Lab data (PRIMARY - all resolutions: d1, h1, h4, h8, h12)
+    2. Sync BRK data (BACKUP - daily only, may fail)
     3. Sync Glassnode data (derivatives)
     4. Check data freshness
     5. Check data quality
@@ -72,43 +72,43 @@ def run_command(command: list, description: str, critical: bool = True) -> bool:
             return False
 
 
-def sync_brk_data():
-    """Sync BRK data (primary on-chain source)."""
-    print_section("STEP 1: Sync BRK Data (FREE)")
+def sync_bitcoin_lab_data(include_hourly=True):
+    """Sync Bitcoin Lab data (PRIMARY source - all resolutions).
+
+    Args:
+        include_hourly: If True, sync all sub-daily resolutions (h1, h4, h8, h12)
+    """
+    print_section("STEP 1: Sync Bitcoin Lab Data (PRIMARY)")
+
+    # Daily sync - always run
     run_command(
-        ["python", "run.py", "brk-sync"],
-        "Syncing BRK daily on-chain data",
+        ["python", "run.py", "bl-sync-daily"],
+        "Syncing Bitcoin Lab daily (d1)",
         critical=True
     )
 
-
-def sync_bitcoin_lab_data(include_hourly=True):
-    """Sync Bitcoin Lab data (daily + optional hourly).
-
-    Args:
-        include_hourly: If True, also sync hourly data for exit signals
-    """
-    print_section("STEP 2: Sync Bitcoin Lab Data")
-
-    # Daily sync - important for NUPL and clean price data
-    run_command(
-        ["python", "run.py", "bl-sync-daily"],
-        "Syncing Bitcoin Lab daily on-chain data",
-        critical=False  # Non-critical - we have BRK as fallback
-    )
-
-    # Hourly sync - useful for faster exit signals (enabled by default)
+    # All sub-daily resolutions
     if include_hourly:
-        print("\n📊 Syncing hourly data for intraday exit signals...")
-        run_command(
-            ["python", "run.py", "bl-sync-hourly"],
-            "Syncing Bitcoin Lab hourly data",
-            critical=False  # Non-critical - nice to have
-        )
+        for res, label in [("hourly", "h1"), ("h4", "h4"), ("h8", "h8"), ("h12", "h12")]:
+            run_command(
+                ["python", "run.py", f"bl-sync-{res}"],
+                f"Syncing Bitcoin Lab {label}",
+                critical=False
+            )
     else:
-        print("\n⏭️  Skipping hourly sync (use without --skip-hourly to enable)")
+        print("\n⏭️  Skipping sub-daily sync (use without --skip-hourly to enable)")
 
     return True
+
+
+def sync_brk_data():
+    """Sync BRK data (BACKUP - may fail with HTTP 530)."""
+    print_section("STEP 2: Sync BRK Data (BACKUP)")
+    run_command(
+        ["python", "run.py", "brk-sync"],
+        "Syncing BRK daily on-chain data",
+        critical=False  # Non-critical - BRK is backup only
+    )
 
 
 def sync_glassnode_data(include_hourly=True):
@@ -205,7 +205,7 @@ def check_data_quality():
 
 
 def run_calculations(include_hourly: bool = True):
-    """Run signal calculations."""
+    """Run signal calculations for all resolutions."""
     print_section("STEP 6: Calculate Trading Signals")
 
     calc_script = PROJECT_ROOT / "scripts" / "calculate.py"
@@ -214,25 +214,41 @@ def run_calculations(include_hourly: bool = True):
         print("❌ calculate.py not found")
         sys.exit(1)
 
-    # Daily calculations (always run)
-    run_command(
-        ["python", str(calc_script)],
-        "Computing daily metrics and signals",
-        critical=True
-    )
+    # All resolutions to calculate: daily always, sub-daily if include_hourly
+    resolutions = [
+        ("daily", True),     # always run
+        ("hourly", include_hourly),
+        ("h4", include_hourly),
+        ("h8", include_hourly),
+        ("h12", include_hourly),
+    ]
 
-    # Hourly calculations (for dashboard toggle)
-    if include_hourly:
-        hourly_dir = PROJECT_ROOT / "data" / "bl" / "hourly"
-        has_hourly_data = hourly_dir.exists() and any(hourly_dir.glob("*.parquet"))
-        if has_hourly_data:
-            run_command(
-                ["python", str(calc_script), "--resolution", "hourly"],
-                "Computing hourly metrics and signals",
-                critical=False
-            )
+    for res, enabled in resolutions:
+        if not enabled:
+            continue
+
+        # Check data directory exists with parquets
+        if res == "daily":
+            data_dir = PROJECT_ROOT / "data" / "bl" / "daily"
+        elif res == "hourly":
+            data_dir = PROJECT_ROOT / "data" / "bl" / "hourly"
         else:
-            print("⏭️  No hourly data found - skipping hourly calculation")
+            data_dir = PROJECT_ROOT / "data" / "bl" / res
+
+        if not data_dir.exists() or not any(data_dir.glob("*.parquet")):
+            print(f"⏭️  No {res} data found - skipping {res} calculation")
+            continue
+
+        is_daily = (res == "daily")
+        cmd = ["python", str(calc_script)]
+        if not is_daily:
+            cmd += ["--resolution", res]
+
+        run_command(
+            cmd,
+            f"Computing {res} metrics and signals",
+            critical=is_daily
+        )
 
 
 def generate_dashboards(open_browser: bool = True):
@@ -319,15 +335,15 @@ Examples:
 
     # Step 1-3: Sync data sources
     if not args.skip_sync:
-        if not args.skip_brk:
-            sync_brk_data()
-        else:
-            print_section("STEP 1: Sync BRK Data (SKIPPED)")
-
         if not args.skip_bitcoin_lab:
             sync_bitcoin_lab_data(include_hourly=not args.skip_hourly)
         else:
-            print_section("STEP 2: Sync Bitcoin Lab Data (SKIPPED)")
+            print_section("STEP 1: Sync Bitcoin Lab Data (SKIPPED)")
+
+        if not args.skip_brk:
+            sync_brk_data()
+        else:
+            print_section("STEP 2: Sync BRK Data (SKIPPED)")
 
         if not args.skip_glassnode:
             sync_glassnode_data(include_hourly=not args.skip_hourly)

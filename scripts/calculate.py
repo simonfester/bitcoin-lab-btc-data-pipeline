@@ -5,9 +5,16 @@ Bitcoin Trading Framework - Signal Calculator
 Computes all signals, z-scores, and derived metrics from raw data.
 Writes results to data/signals/ for dashboard consumption.
 
+All 5 resolutions are supported and treated equally:
+  daily, hourly (h1), h4, h8, h12
+
 Usage:
-    python calculate.py              # Calculate all signals
-    python calculate.py --verbose    # With detailed output
+    python calculate.py                          # Daily signals
+    python calculate.py --resolution hourly      # Hourly (h1) signals
+    python calculate.py --resolution h4          # 4-hourly signals
+    python calculate.py --resolution h8          # 8-hourly signals
+    python calculate.py --resolution h12         # 12-hourly signals
+    python calculate.py --verbose                # With detailed output
 """
 
 import pandas as pd
@@ -23,16 +30,23 @@ import sys
 
 PROJECT_ROOT = Path(__file__).parent.parent
 RAW_DATA_DIR = PROJECT_ROOT / "data" / "brk" / "daily"
-HOURLY_DATA_DIR = PROJECT_ROOT / "data" / "bl" / "hourly"
 GLASSNODE_DIR = PROJECT_ROOT / "data" / "glassnode" / "daily"
 GLASSNODE_HOURLY_DIR = PROJECT_ROOT / "data" / "glassnode" / "hourly"
 SIGNALS_DIR = PROJECT_ROOT / "data" / "signals"
 
-# Metrics available at hourly resolution from Bitcoin Lab API.
-# API has 348 metrics total; almost all support h1. Only a subset is listed here
-# (the ones used by the signal calculator). Only 12 are currently synced to disk
-# due to quota limits (1M DPs/week). See: https://researchbitcoin.net/metrics/
-HOURLY_METRICS = {
+# All supported resolutions and their Bitcoin Lab data directories
+ALL_RESOLUTIONS = ['daily', 'hourly', 'h4', 'h8', 'h12']
+RESOLUTION_DIRS = {
+    'daily':  PROJECT_ROOT / "data" / "bl" / "daily",
+    'hourly': PROJECT_ROOT / "data" / "bl" / "hourly",
+    'h4':     PROJECT_ROOT / "data" / "bl" / "h4",
+    'h8':     PROJECT_ROOT / "data" / "bl" / "h8",
+    'h12':    PROJECT_ROOT / "data" / "bl" / "h12",
+}
+
+# Metrics synced to Bitcoin Lab across all resolutions (54 metrics).
+# See config/metrics.yaml for the full registry.
+BL_METRICS = {
     'price', 'market_cap',
     'mvrv', 'mvrv_z', 'mvrv_lth', 'mvrv_sth', 'nvt', 'velocity',
     'sopr', 'sopr_lth', 'sopr_sth',
@@ -45,12 +59,15 @@ HOURLY_METRICS = {
     'true_market_mean_price', 'investor_cap', 'thermo_cap',
     'vaulted_price', 'aviv',
     'coindays_destroyed', 'asol', 'dormancy',
-    'difficulty', 'tx_count', 'utxo_increase',
+    'hashrate', 'difficulty', 'tx_count', 'utxo_increase',
     'fee_total', 'fee_total_usd', 'fee_avg',
     'volume_btc', 'volume_usd', 'volume_btc_adjusted',
     'unrealized_profit', 'unrealized_loss', 'unrealized_cap',
     'realized_profit', 'realized_loss',
 }
+
+# Keep backward-compatible alias
+HOURLY_METRICS = BL_METRICS
 
 # Hourly smoothing configuration
 SMOOTHING_WINDOWS = [4, 6, 8, 12]  # hours
@@ -100,63 +117,80 @@ BUY_THE_DIP_CONDITIONS = [
 def load_metric(name: str, source: str = "brk", resolution: str = "daily") -> pd.DataFrame:
     """Load metric from parquet file, normalizing to 'time' and 'value' columns.
 
-    For resolution='hourly': loads from hourly dir if metric supports h1,
-    otherwise falls back to daily BRK data.
+    Resolution mapping (all resolutions treated equally):
+      - daily  → data/bl/daily/  (fallback: data/brk/daily/)
+      - hourly → data/bl/hourly/ (fallback: data/brk/daily/)
+      - h4     → data/bl/h4/     (fallback: data/bl/daily/)
+      - h8     → data/bl/h8/     (fallback: data/bl/daily/)
+      - h12    → data/bl/h12/    (fallback: data/bl/daily/)
+
+    Glassnode source always loads from data/glassnode/daily/ (no sub-daily).
     """
-    if resolution == "hourly" and name in HOURLY_METRICS:
-        path = HOURLY_DATA_DIR / f"{name}.parquet"
-        if not path.exists():
-            # Fall back to daily
-            path = RAW_DATA_DIR / f"{name}.parquet"
-    elif resolution == "hourly" and source == "glassnode":
-        path = GLASSNODE_HOURLY_DIR / f"{name}.parquet"
-        if not path.exists():
-            # Fall back to daily glassnode
+    if source == "glassnode":
+        # Glassnode: try hourly dir for sub-daily, fall back to daily
+        if resolution != "daily":
+            path = GLASSNODE_HOURLY_DIR / f"{name}.parquet"
+            if not path.exists():
+                path = GLASSNODE_DIR / f"{name}.parquet"
+        else:
             path = GLASSNODE_DIR / f"{name}.parquet"
-    elif source == "brk":
-        path = RAW_DATA_DIR / f"{name}.parquet"
-    elif source == "glassnode":
-        path = GLASSNODE_DIR / f"{name}.parquet"
+    elif name in BL_METRICS:
+        # Bitcoin Lab: use resolution-specific directory
+        bl_dir = RESOLUTION_DIRS.get(resolution, RESOLUTION_DIRS['daily'])
+        path = bl_dir / f"{name}.parquet"
+        if not path.exists():
+            # Fallback chain: BL daily → BRK daily
+            if resolution != 'daily':
+                bl_daily = RESOLUTION_DIRS['daily'] / f"{name}.parquet"
+                if bl_daily.exists():
+                    path = bl_daily
+                else:
+                    path = RAW_DATA_DIR / f"{name}.parquet"
+            else:
+                path = RAW_DATA_DIR / f"{name}.parquet"
     else:
-        path = Path(source) / f"{name}.parquet"
-    
+        # Unknown metric: try BRK daily
+        path = RAW_DATA_DIR / f"{name}.parquet"
+
     if not path.exists():
         return pd.DataFrame(columns=['time', 'value'])
-    
+
     df = pd.read_parquet(path)
-    
+
     # Normalize time column
     time_col = None
     for col in ['time', 'date', 'timestamp']:
         if col in df.columns:
             time_col = col
             break
-    
+
     if time_col is None and isinstance(df.index, pd.DatetimeIndex):
         df = df.reset_index()
         time_col = df.columns[0]
-    
+
     if time_col and time_col != 'time':
         df = df.rename(columns={time_col: 'time'})
-    
+
     if 'time' not in df.columns:
         return pd.DataFrame(columns=['time', 'value'])
-    
+
     # Normalize value column
     if 'value' not in df.columns:
         for col in df.columns:
             if col != 'time' and pd.api.types.is_numeric_dtype(df[col]):
                 df = df.rename(columns={col: 'value'})
                 break
-    
+
     if 'value' not in df.columns:
         return pd.DataFrame(columns=['time', 'value'])
-    
+
     df['time'] = pd.to_datetime(df['time'])
     if hasattr(df['time'].dt, 'tz') and df['time'].dt.tz is not None:
         df['time'] = df['time'].dt.tz_localize(None)
-    
-    return df[['time', 'value']].sort_values('time').reset_index(drop=True)
+
+    df = df[['time', 'value']].sort_values('time').reset_index(drop=True)
+
+    return df
 
 
 def get_latest(df: pd.DataFrame) -> tuple:
@@ -660,12 +694,12 @@ def calculate_buy_the_dip(data: dict, resolution: str = "daily") -> dict:
     metrics = {'conditions': [], 'met_count': 0}
     
     # Load Glassnode derivatives for funding/liquidations
-    # Hourly Glassnode data often has trailing zeros — fall back to daily if latest is 0/null
+    # Sub-daily Glassnode data often has trailing zeros — fall back to daily if latest is 0/null
     funding_df = load_metric('funding_rate', source='glassnode', resolution=resolution)
     long_liq_df = load_metric('liquidations_long', source='glassnode', resolution=resolution)
     short_liq_df = load_metric('liquidations_short', source='glassnode', resolution=resolution)
 
-    if resolution == "hourly":
+    if resolution != "daily":
         funding_val, _ = get_latest(funding_df)
         long_liq_val, _ = get_latest(long_liq_df)
         short_liq_val, _ = get_latest(short_liq_df)
@@ -729,8 +763,8 @@ def calculate_8_metric_exit_detector(data: dict, resolution: str = "daily") -> d
     price_df = data.get('price', pd.DataFrame())
     price_200sma_df = data.get('price_200d_sma', pd.DataFrame())
     funding_df = load_metric('funding_rate', source='glassnode', resolution=resolution)
-    # Fall back to daily if hourly funding has trailing zeros
-    if resolution == "hourly":
+    # Fall back to daily if sub-daily funding has trailing zeros
+    if resolution != "daily":
         fv, _ = get_latest(funding_df)
         if not fv:
             funding_df = load_metric('funding_rate', source='glassnode', resolution='daily')
@@ -965,17 +999,17 @@ def smooth_hourly_data(data: dict, window: int) -> dict:
     return smoothed
 
 
-def calculate_smoothed_hourly(verbose: bool = False):
-    """Run smoothed variants of hourly signal calculations.
+def calculate_smoothed_variants(resolution: str = "hourly", verbose: bool = False):
+    """Run smoothed variants of sub-daily signal calculations.
 
-    For each window in SMOOTHING_WINDOWS, smooths the raw hourly data
+    For each window in SMOOTHING_WINDOWS, smooths the raw data
     and re-runs all signal calculations, saving results with an MA suffix.
     """
     print("\n" + "=" * 50)
-    print("Smoothed Hourly Signal Variants")
+    print(f"Smoothed {resolution} Signal Variants")
     print("=" * 50)
 
-    # Load raw hourly data once
+    # Load raw data once
     metrics_needed = [
         'price', 'mvrv', 'mvrv_z', 'mvrv_sth', 'mvrv_lth', 'aviv',
         'nupl', 'nupl_lth', 'nupl_sth', 'market_cap',
@@ -989,26 +1023,27 @@ def calculate_smoothed_hourly(verbose: bool = False):
         'sell_side_risk', 'reserve_risk', 'price_200d_sma'
     ]
 
-    print("\nLoading raw hourly metrics...")
+    bl_dir = RESOLUTION_DIRS.get(resolution, RESOLUTION_DIRS['hourly'])
+    print(f"\nLoading raw {resolution} metrics from {bl_dir}...")
     data = {}
     latest_time = None
-    hourly_loaded = []
+    loaded = []
 
     for m in metrics_needed:
-        df = load_metric(m, resolution="hourly")
+        df = load_metric(m, resolution=resolution)
         data[m] = df
         _, ts = get_latest(df)
-        if m in HOURLY_METRICS:
-            hourly_path = HOURLY_DATA_DIR / f"{m}.parquet"
-            if hourly_path.exists():
-                hourly_loaded.append(m)
+        if m in BL_METRICS:
+            metric_path = bl_dir / f"{m}.parquet"
+            if metric_path.exists():
+                loaded.append(m)
         if ts and (not latest_time or ts > latest_time):
             latest_time = ts
 
-    print(f"  Loaded {len(hourly_loaded)} hourly metrics, latest: {latest_time}")
+    print(f"  Loaded {len(loaded)} {resolution} metrics, latest: {latest_time}")
 
     for window in SMOOTHING_WINDOWS:
-        print(f"\n--- MA-{window} ({window}h smoothing) ---")
+        print(f"\n--- MA-{window} ({window}-period smoothing) ---")
         smoothed_data = smooth_hourly_data(data, window)
 
         # Run all signal calculations on smoothed data
@@ -1016,11 +1051,11 @@ def calculate_smoothed_hourly(verbose: bool = False):
             'meta': {
                 'calculated_at': datetime.now().isoformat(),
                 'data_as_of': latest_time.isoformat() if latest_time else None,
-                'resolution': 'hourly',
+                'resolution': resolution,
                 'smoothing': f'MA-{window}',
                 'smoothing_window': window,
                 'smoothed_metrics': SMOOTH_METRICS,
-                'hourly_metrics': sorted(hourly_loaded),
+                'loaded_metrics': sorted(loaded),
             },
             'price_context': calculate_price_context(smoothed_data),
             'valuation': calculate_valuation_metrics(smoothed_data),
@@ -1030,8 +1065,8 @@ def calculate_smoothed_hourly(verbose: bool = False):
             'liveliness': calculate_liveliness_metrics(smoothed_data),
             'miner': calculate_miner_metrics(smoothed_data),
             'checkmate': calculate_checkmate_signal(smoothed_data),
-            'buy_the_dip': calculate_buy_the_dip(smoothed_data, resolution="hourly"),
-            'exit_8_metric': calculate_8_metric_exit_detector(smoothed_data, resolution="hourly"),
+            'buy_the_dip': calculate_buy_the_dip(smoothed_data, resolution=resolution),
+            'exit_8_metric': calculate_8_metric_exit_detector(smoothed_data, resolution=resolution),
             'sth_mvrv_zones': calculate_sth_mvrv_zones(smoothed_data),
             'lth_distribution': calculate_lth_distribution_signal(smoothed_data),
         }
@@ -1049,7 +1084,7 @@ def calculate_smoothed_hourly(verbose: bool = False):
                 }
         results['z_scores'] = z_scores
 
-        save_results(results, resolution="hourly", suffix=f"_ma{window}")
+        save_results(results, resolution=resolution, suffix=f"_ma{window}")
 
         # Print quick summary
         btd = results['buy_the_dip']
@@ -1071,8 +1106,9 @@ def calculate_all(verbose: bool = False, resolution: str = "daily") -> dict:
 
     Args:
         verbose: Print detailed metric loading info.
-        resolution: 'daily' or 'hourly'. Hourly loads h1 data where available,
-                    falls back to daily for metrics without h1 support.
+        resolution: One of 'daily', 'hourly', 'h4', 'h8', 'h12'.
+                    Each resolution loads from its Bitcoin Lab directory,
+                    falling back to BL daily then BRK daily.
     """
     print("=" * 50)
     print(f"Signal Calculator ({resolution})")
@@ -1092,13 +1128,12 @@ def calculate_all(verbose: bool = False, resolution: str = "daily") -> dict:
         'sell_side_risk', 'reserve_risk', 'price_200d_sma'
     ]
 
+    bl_dir = RESOLUTION_DIRS.get(resolution, RESOLUTION_DIRS['daily'])
     print(f"\nLoading raw metrics (resolution={resolution})...")
-    if resolution == "hourly":
-        print(f"  H1 metrics: {', '.join(sorted(HOURLY_METRICS))}")
-        print(f"  Others fall back to daily BRK data")
+    print(f"  Primary dir: {bl_dir}")
 
     data = {}
-    hourly_loaded = []
+    bl_loaded = []
     latest_time = None
 
     for m in metrics_needed:
@@ -1106,14 +1141,14 @@ def calculate_all(verbose: bool = False, resolution: str = "daily") -> dict:
         data[m] = df
         val, ts = get_latest(df)
 
-        # Track which metrics actually loaded from hourly
-        if resolution == "hourly" and m in HOURLY_METRICS:
-            hourly_path = HOURLY_DATA_DIR / f"{m}.parquet"
-            if hourly_path.exists():
-                hourly_loaded.append(m)
+        # Track which metrics loaded from the resolution's BL directory
+        if m in BL_METRICS:
+            metric_path = bl_dir / f"{m}.parquet"
+            if metric_path.exists():
+                bl_loaded.append(m)
 
         if verbose and val is not None:
-            src_tag = " [H1]" if m in hourly_loaded else ""
+            src_tag = f" [{resolution}]" if m in bl_loaded else ""
             print(f"  ✓ {m}: {val:.6f}{src_tag}")
         elif verbose:
             print(f"  ✗ {m}")
@@ -1121,20 +1156,18 @@ def calculate_all(verbose: bool = False, resolution: str = "daily") -> dict:
         if ts and (not latest_time or ts > latest_time):
             latest_time = ts
 
-    if resolution == "hourly":
-        print(f"  Loaded {len(hourly_loaded)}/{len(HOURLY_METRICS)} hourly metrics")
-
+    print(f"  Loaded {len(bl_loaded)}/{len(BL_METRICS)} {resolution} metrics")
     print(f"\nLatest data: {latest_time}")
-    
+
     # Calculate all metric groups
     print("\nCalculating metrics...")
-    
+
     results = {
         'meta': {
             'calculated_at': datetime.now().isoformat(),
             'data_as_of': latest_time.isoformat() if latest_time else None,
             'resolution': resolution,
-            'hourly_metrics': sorted(hourly_loaded) if resolution == "hourly" else [],
+            'loaded_metrics': sorted(bl_loaded),
         },
         'price_context': calculate_price_context(data),
         'valuation': calculate_valuation_metrics(data),
@@ -1175,7 +1208,7 @@ def save_results(results: dict, resolution: str = "daily", suffix: str = ""):
 
     Args:
         results: Calculated signal results dict.
-        resolution: 'daily' or 'hourly'.
+        resolution: One of 'daily', 'hourly', 'h4', 'h8', 'h12'.
         suffix: Extra suffix for smoothed variants (e.g. '_ma4').
     """
     print("\nSaving results...")
@@ -1195,7 +1228,8 @@ def save_results(results: dict, resolution: str = "daily", suffix: str = ""):
         raise TypeError(f"Type {type(obj)} not serializable")
 
     # Save main dashboard context as JSON (for easy reading)
-    res_suffix = "_hourly" if resolution == "hourly" else ""
+    # daily → "" (no suffix), hourly → "_hourly", h4 → "_h4", etc.
+    res_suffix = "" if resolution == "daily" else f"_{resolution}"
     full_suffix = f"{res_suffix}{suffix}"
     context_path = SIGNALS_DIR / f"dashboard_context{full_suffix}.json"
     with open(context_path, 'w') as f:
@@ -1239,16 +1273,16 @@ def main():
             resolution = sys.argv[i + 1]
             break
 
-    if resolution not in ("daily", "hourly"):
-        print(f"Unknown resolution: {resolution}. Use 'daily' or 'hourly'.")
+    if resolution not in ALL_RESOLUTIONS:
+        print(f"Unknown resolution: {resolution}. Use one of: {', '.join(ALL_RESOLUTIONS)}")
         sys.exit(1)
 
     results = calculate_all(verbose=verbose, resolution=resolution)
     save_results(results, resolution=resolution)
 
-    # Run smoothed variants for hourly resolution
-    if resolution == "hourly":
-        calculate_smoothed_hourly(verbose=verbose)
+    # Run smoothed variants for sub-daily resolutions
+    if resolution != "daily":
+        calculate_smoothed_variants(resolution=resolution, verbose=verbose)
 
     # Print summary
     print("\n" + "=" * 50)
