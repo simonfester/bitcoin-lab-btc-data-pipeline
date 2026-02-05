@@ -14,3 +14,12 @@ statsmodels>=0.14.0
 
 # Optional: for plotting
 matplotlib>=3.7.0
+
+# TUI dashboard
+textual>=1.0.0
+websockets>=12.0
+
+# Coinbase API (for position tracking)
+PyJWT>=2.8.0
+cryptography>=41.0.0
+python-dotenv>=1.0.0
